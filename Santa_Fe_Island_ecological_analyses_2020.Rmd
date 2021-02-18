@@ -21,27 +21,26 @@ p.caption {
 }
 </style>
 
-```{r, setup, warning = FALSE, include = FALSE}
-# clear working environment
+```{r, setup, warning = FALSE, message = FALSE}
+# clear working environment and set wd
 rm(list=ls())
-
-wd <- "C:/Users/Harrison/Documents/GC/Santa_Fe/Santa_Fe_Git/santa-fe"
+wd <- getwd()
 
 library(knitr)
+library(kableExtra)
 knitr::opts_knit$set(root.dir = wd)
 knitr::opts_chunk$set(fig.align = "center", fig.pos = "h", 
-                      message = FALSE, warning = FALSE, dpi = 300)
+                      message = FALSE, warning = FALSE, dpi = 600)
 
-#load some R packages, create custom graphic options
-library(RMark)
+#load some R packages
 library(ggplot2)
 library(ggalt)
-library(mgcv)
 library(ggthemes)
 library(ggExtra)
 library(lisa)
 library(lubridate)
 library(tidyverse)
+library(reshape2)
 
 # load custom functions and settings
 source("custom_functions_settings.R", verbose = FALSE)
@@ -50,7 +49,7 @@ source("custom_functions_settings.R", verbose = FALSE)
 \  
 \  
 
-**Summary**: This document provides a synthesis of initial demographic outcomes of the release of 551 captively bred Española tortoises on the island of Santa Fe in the Galapagos archipelago. I summarize the results from three separate analyses on the (1) growth, (2) survival, and (3) dispersal of these tortoises from 2015 to 2020.
+**Summary**: This document provides a synthesis of initial demographic outcomes of the release of 551 captive bred Española tortoises on the island of Santa Fe in the Galapagos archipelago. I summarize the results from three separate analyses on the (1) growth, (2) survival, and (3) dispersal of these tortoises from 2015 to 2020.
 
 ```{r, tortoise-photo, echo = FALSE, out.width = "35%", out.height = "35%", fig.align = "center", fig.cap = "A juvenile Española tortoise on Santa Fe Island."}
 
@@ -99,8 +98,9 @@ recaps_df <- data.frame(PIT_capture = sf_recaps$`Número de PIT`,
 # load release data
 sf_release <- read_excel(path = "data/tortoise_data_Mar_2020.xlsx",
                          sheet = "Tortugas liberadas DPNG", na = "NA",
-                         col_types = c(rep("text", 5), "numeric", "date", rep("numeric", 3), 
-                                       "text", rep("numeric", 6)))
+                         col_types = c(rep("text", 5), "numeric", "date", 
+                                       rep("numeric", 3), "text", 
+                                       rep("numeric", 6)))
 # reformat release data
 release_df <- data.frame(PIT_capture = sf_release$`No. con PIT`,
                          PIT_release = sf_release$`No. con PIT`,
@@ -224,7 +224,7 @@ ggplot(santafe.raw, aes(x = LC_capture, y = Peso_capture)) +
   theme_classic() + mythemes
 ```
 
-Let's omit those 71 outliers before modeling growth.
+Let's omit those 71 outliers before modeling body condition and growth rates.
 
 ```{r, omit-santafe-outliers}
 santafe.clean <- santafe.raw[santafe.raw$unique_id %notin% 
@@ -232,75 +232,19 @@ santafe.clean <- santafe.raw[santafe.raw$unique_id %notin%
 santafe.clean$PIT_final <- as.factor(santafe.clean$PIT_final)
 ```
 
-Here I'll model the simple relationship between body size (LC) and age using generalized additive models (GAMs), with a random effect for tortoise ID (PIT tag). This will allow us to look at overall growth patterns, while also accounting for the variation in individual growth rates.
-
-```{r, GAM-for-LC-vs-age-on-Santa-Fe}
-library(mgcv)
-gam.larga <- bam(LC_capture ~ s(Age_actual) + s(PIT_final, bs = "re"), 
-                 data = santafe.clean)
-summary(gam.larga)
-```
-<br>
-
-```{r, plot-size-vs-age-sf}
-library(tidymv)
-length.plot.sf <- plot_smooths(model = gam.larga, series = Age_actual) + 
-  geom_point(data = santafe.clean, 
-             mapping = aes(x = Age_actual, y = LC_capture), 
-             alpha = 0.1, shape = 16) + 
-  geom_line(size = 0.5, col = "black") + 
-  labs(y = "Curved carapace length (cm)", x = "Age (years)") + 
-  scale_x_continuous(limits = c(4,14), breaks = c(4:14)) +
-  theme_classic() + mythemes
-
-length.plot.sf
-```
-
-Let's do the same for tortoise weight.
-
-```{r, GAM-for-weight-vs-age-on-Santa-Fe}
-gam.peso <- bam(Peso_capture ~ s(Age_actual) + s(PIT_final, bs="re"), 
-                data = santafe.clean)
-summary(gam.peso)
-```
-
-Let's plot out the predicted relationship.
-
-```{r, plot-predicted-Santa-Fe-growth-rates-weight}
-weight.plot.sf <- plot_smooths(model = gam.peso, series = Age_actual) + 
-  geom_point(data = santafe.clean, 
-             aes(x = Age_actual, y = Peso_capture), alpha = 0.1, shape = 16) + 
-  geom_line(size = 0.5, col = "black") + labs(y = "Weight (kg)", x = "Age") + 
-  scale_x_continuous(limits = c(4,14), breaks = c(4:14)) +
-  theme_classic() + mythemes
-
-weight.plot.sf
-```
-
-It is important to remember that we have a very small sample of individuals captured at 14 years old, (n = 5). It is unlikely that the tortoises on Santa Fe are shrinking as they get old. But it seems that some tortoises have remained small and experienced limited growth for their age.
-
-Let's put changes in length and weight on the same plot.
-
-```{r, plot-predicted-changes-in-length-and-weight-of-SF-tortoises, height = 8, width = 8}
-library(ggpubr)
-ggarrange(length.plot.sf, weight.plot.sf, nrow = 2, common.legend = TRUE, 
-          legend = "right",
-          labels = c("Deviance explained = 98.3% \n \      R2-adj = 0.98", 
-                     "Deviance explained = 93.7% \n \      R2-adj = 0.92"), 
-          hjust = -0.3)
-```
-
 ### Body condition
 
-What if we relate length and weight with each other (e.g., body condition)?
+Here I'll model the simple relationship between body mass and size (curved carapace length) using generalized additive mixed models (GAMMs), including a random effect for tortoise ID (PIT tag). This will allow us to estimate a body condition function, while also accounting for the variation in individual morphology and growth patterns. We can do this in the `mgcv` package (Wood, 2011).
 
 ```{r, body-condition-GAM-for-Santa-Fe-tortoises}
+library(mgcv)
 gam.largavpeso.sf <- bam(Peso_capture ~ s(LC_capture) + s(PIT_final, bs="re"), 
                          data = santafe.clean)
 summary(gam.largavpeso.sf)
 ```
 
 ```{r, plot-predicted-body-condition-of-SF-tortoises}
+library(tidymv)
 largavpeso.sf.plot <-  
   plot_smooths(model = gam.largavpeso.sf, series = LC_capture) + 
   geom_point(data = santafe.clean, 
@@ -319,10 +263,9 @@ largavpeso.sf.plot
 
 It doesn't look like there is any between-cohort variation in body condition. All cohorts are evenly distributed along the fitted body condition curve.
 
-We can confirm this by summarizing residual patterns. Let's inspect a few things:
+We can explore this further by platting the residuals. Let's inspect a few things:
 
 + Residuals by release cohort
-+ Residuals by elapsed time-since-release
 + Residuals by time
 
 ```{r, body-cond-res-plots}
@@ -349,17 +292,10 @@ body.res <-
                                                       )))
                               
 ggplot(body.res, aes(x = Cohort2, y = resid)) +
-  stat_summary(fun.data = "mean_cl_normal",  geom = "pointrange") +
+  geom_violin(fill = "midnightblue", color = "midnightblue") +
+  geom_boxplot(width = 0.1) +
   geom_hline(aes(yintercept = 0), lty = "dashed") +
   ylab("Body condition residual") + xlab("Cohort") +
-  theme_classic() + mythemes
-
-ggplot(body.res, aes(x = time_since_release, y = resid)) +
-  facet_wrap(~Cohort2, nrow = 3) +
-  geom_smooth(method = "lm") +
-  geom_point(shape = 16, alpha = 0.05) +
-  geom_hline(aes(yintercept = 0), lty = "dashed") +
-  ylab("Body condition residual") + xlab("Days since release") +
   theme_classic() + mythemes
 
 body.res %>%
@@ -376,25 +312,7 @@ body.res %>%
 
 bc.res.plot
 ```
-
-```{r, include = FALSE}
-# 
-# body.res %>%
-#   group_by(time_occ, Cohort2) %>%
-#   summarise(resid = mean(resid)) %>%
-#   ggplot() +    
-#   geom_hline(aes(yintercept = 0), lty = "dashed", alpha = 0.4) +
-#   geom_point(data = body.res, aes(x = time_occ, y = resid), 
-#              shape = 16, alpha = 0.1, col = "grey50", position = "jitter") +
-#   geom_point(aes(x = time_occ, y = resid), color = "black", shape = "-", size = 6) +
-#   facet_wrap(~Cohort2, nrow = 3) + 
-#   ylab("Body condition residual") + xlab("Capture date") +
-#   theme_classic() + mythemes -> bc.res.plot.grayscale
-# 
-# bc.res.plot.grayscale
-```
-
-There don't appear to be any differences in body condition between release cohorts. There also don't appear to be any strong trends in body condition over time, except for a recent uptick (heavier) in the last year.
+There don't appear to be any differences in body condition between release cohorts. There also don't appear to be any trends in body condition over time, except for a recent uptick (heavier) in the last year.
 
 ## Tortoise morphology---Española
 
@@ -491,57 +409,46 @@ hood.data %>%
             sd_n = sd(n_raw)) %>% ungroup()
 ```
 
-Let's first look at the change in length with age.
-
 ```{r}
-gam.larga.hood <- bam(LC_capture ~ Island + s(Age_capture) + 
-                        s(Age_capture, by = Island_ord) + 
-                        s(ID, bs = "re"), data = hood.data)
+gal.clim <- read.csv("data/pa_cdf_climate.csv")
+gal.clim$date <- as.Date(gal.clim$observation_date, format = "%m/%d/%Y")
+gal.clim$yr_month <- format(gal.clim$date, "%Y-%m")
 
-summary(gam.larga.hood)
+## get potential evapotranspiration
+gal.clim$pet_turc <- 
+  0.013*(gal.clim$mean_air_temp/(gal.clim$mean_air_temp+15))*((100/4.1868)+50)
 
-# predict from model to plot curves for both populations
-age.sim = rep(seq(min(hood.data$Age_capture), max(hood.data$Age_capture), 
-                  length.out = 30), 2)
+## get monthly temp values
+gal.clim.month.mean <- 
+  gal.clim %>%
+  group_by(yr_month) %>%
+  summarise(mean_temp = mean(mean_air_temp, na.rm = T),
+            mean_min_temp = mean(min_air_temp, na.rm = T),
+            mean_max_temp = mean(max_air_temp, na.rm = T),
+            mean_humidity = mean(humidity, na.rm = T),
+            tot_precip = sum(precipitation, na.rm = T),
+            dec.date = decimal_date(mean(date)))
 
-# create sequence of islands for prediction
-island.sim = c(rep("Santa Fe", 30), rep("Española", 30))
+## new data frame of dates and spi5 values
+library(SPEI)
+cdf.spi <- 
+  data.frame(
+    yr_month = gal.clim.month.mean$yr_month[5:nrow(gal.clim.month.mean)],
+    dec.date = gal.clim.month.mean$dec.date[5:nrow(gal.clim.month.mean)],
+    tot_prec = gal.clim.month.mean$tot_precip[5:nrow(gal.clim.month.mean)],
+    spi5 = spi(gal.clim.month.mean$tot_precip,5)$fitted[5:nrow(gal.clim.month.mean),])
 
-# create new data frame with model covariates for prediction
-newdat = data.frame(Age_capture = age.sim, Island = island.sim, 
-                    Island_ord = island.sim)
+## create lagged SPI values to connect to body condition data (1 year rolling average)
+cdf.spi$spi5_1yr = rollmean(cdf.spi$spi5, 12, align = "right", fill = NA)
 
-# predict
-hood.larga.pred <- predict.gam(gam.larga.hood, newdata = newdat, 
-                               exclude = "s(ID)", type = "response", 
-                               newdata.guaranteed = TRUE, se.fit=TRUE)
+find.spi.lag <- function(cap.date) {
+  return(cdf.spi$spi5_1yr[which.min(abs(cdf.spi$dec.date - cap.date))])
+  }
 
-# put predicted values and error in new data frame for plotting
-hood.larga <- data.frame(Island = island.sim,
-                         Age = age.sim,
-                         Pred = hood.larga.pred$fit,
-                         SE = hood.larga.pred$se.fit)
-
-# plot
-hood.larga.plot <- ggplot(hood.larga, aes(x = Age, y = Pred, color = Island, 
-                              fill = Island)) + 
-  geom_ribbon(aes(ymin = Pred - 1.96*SE, ymax = Pred + 1.96*SE), 
-              alpha = 0.2, color = "transparent") + xlim(4,15) + 
-  geom_line(size = 1) + 
-  geom_point(data = hood.data, inherit.aes = FALSE,
-             aes(x = Age_capture, y = LC_capture, color = Island), 
-             shape = 16, alpha = 0.2) +
-  scale_x_continuous(limit = c(4,15), breaks = c(4:15)) +
-  scale_color_manual(values = c("indianred4", "dodgerblue4")) + 
-  scale_fill_manual(values = c("indianred4", "dodgerblue4")) +
-  labs(y = "Curved carapace length (cm)", x = "Age (years)") + 
-  theme_classic() + mythemes +
-  theme(legend.position = "bottom")
-
-hood.larga.plot
+hood.data <- hood.data %>%
+  mutate(spi5_1yr = map_dbl(dec.date, find.spi.lag))
 ```
 
-The juvenile tortoises on Santa Fe are smaller than their counterparts on Española. This could be because they were released as older and/or smaller juveniles on Santa Fe, thus acclimating to the island ecosystem at a later developmental stage. The Santa Fe tortoises seem to catch up by age 12 though.
 
 ### Body condition
 
@@ -550,6 +457,7 @@ Let's model the relationship between length and weight and compare that body con
 ```{r, contrast-SF-and-Espanola-body-condition-scatterplot}
 hood.bc.gam <- bam(Peso_capture ~ Island + s(LC_capture) +
                    s(LC_capture, by = Island_ord) + 
+                   s(spi5_1yr) +
                    s(ID, bs = "re"), data = hood.data)
 
 summary(hood.bc.gam)
@@ -562,8 +470,10 @@ larga.sim = c(rep(seq(min(santafe.clean$LC_capture),
 island.sim = c(rep("Santa Fe", 100), rep("Española", 100))
 
 # create new data frame with model covariates for prediction
-newdat = data.frame(LC_capture = larga.sim, Island_ord = island.sim, 
-                    Island = island.sim)
+newdat = data.frame(LC_capture = larga.sim, 
+                    Island_ord = island.sim, 
+                    Island = island.sim,
+                    spi5_1yr = 0)
 
 # predict
 hood.bc.pred <- predict.gam(hood.bc.gam, newdata = newdat,
@@ -601,33 +511,7 @@ hood.bc.plot <- ggplot(hood.bc,
 hood.bc.plot
 ```
 
-```{r, include = FALSE}
-# hood.bc.plot.grayscale <- 
-#   ggplot(hood.bc, aes(x = larga, y = peso, color = Island, fill = Island, 
-#                       lty = Island)) + 
-#   geom_ribbon(aes(ymin = peso - 1.96*SE, ymax = peso + 1.96*SE), 
-#               color = "transparent", alpha = 0.2) +
-#   geom_point(inherit.aes = FALSE, 
-#              data = hood.data[hood.data$Island == "Santa Fe",], 
-#              mapping = aes(x = LC_capture, y = Peso_capture), 
-#              position = "jitter", shape = 21, alpha = 0.3, col = "black") + 
-#   geom_point(inherit.aes = FALSE, 
-#              data = hood.data[hood.data$Island == "Española",], 
-#              mapping = aes(x = LC_capture, y = Peso_capture), 
-#              position = "jitter", shape = 24, alpha = 0.3, col = "gray50") + 
-#   geom_line(size = 1.1) +
-#   scale_color_manual(values = c("gray30", "black")) + 
-#   scale_fill_manual(values = c("gray30", "black")) +
-#   scale_linetype_manual(values = c("dashed", "solid")) +
-#   labs(y = "Weight (kg)", x = "Curved carapace length (cm)") + 
-#   theme_classic() + mythemes + theme(legend.position = "bottom") + 
-#   xlim(min(santafe.clean$LC_capture), max(santafe.clean$LC_capture)) + 
-#   ylim(c(0,22))
-# 
-# hood.bc.plot.grayscale
-```
-
-It looks like the Santa Fe and Española tortoise populations are showing similar morphological patterns, despite the Santa Fe tortoises being smaller at given ages. There is a slight divergence in body condition that begins at about 40 cm, where tortoises on Santa Fe are a bit heavier for a given size than those on Española.
+It looks like the Santa Fe and Española tortoise populations are showing similar morphological patterns. There is a slight divergence in body condition that begins at about 40 cm, where tortoises on Santa Fe are a bit heavier for a given size than those on Española.
 
 Let's export our body condition model table to a csv file.
 
@@ -746,6 +630,8 @@ growth.tabulate <- function(data){
           # growth rate
           growth_cm_yr = (tdata$LC_capture[cap] - tdata$LC_capture[cap-1])/
             (tdata$cap_date[cap] - tdata$cap_date[cap-1]),
+          spi5 = mean(cdf.spi$spi5[cdf.spi$dec.date >= tdata$cap_date[cap-1] &
+                                    cdf.spi$dec.date < tdata$cap_date[cap]]),
           stringsAsFactors = FALSE)
         growth_data <- bind_rows(growth_data, new.df)
       }
@@ -798,7 +684,10 @@ santafe.growth.dat <- growth.dat %>%
   filter(Island == "Santa Fe") %>%
   droplevels()
 
-santafe.growth.gam <- bam(growth_rate_final ~ s(mid_lc) + s(ID, bs="re"), 
+santafe.growth.gam <- bam(growth_rate_final ~ 
+                            s(mid_lc) + 
+                            s(spi5) +
+                            s(ID, bs="re"), 
                           data = santafe.growth.dat)
 
 summary(santafe.growth.gam)
@@ -809,7 +698,7 @@ larga.sim = seq(min(na.omit(santafe.growth.dat$mid_lc)),
                 max(na.omit(santafe.growth.dat$mid_lc)), length.out = 100)
 
 # santa fe prediction
-newdat <- data.frame(mid_lc = larga.sim)
+newdat <- data.frame(mid_lc = larga.sim, spi5 = 0)
 santafe.pred <- predict.gam(santafe.growth.gam, newdata = newdat, 
                             exclude = "s(ID)", newdata.guaranteed = TRUE,
                             type = "response", se.fit=TRUE)
@@ -854,8 +743,8 @@ growth.res <-
 
 growth.res.plot <- 
   ggplot(growth.res, aes(x = midyear, y = resid)) +
-  geom_point(shape = 16, alpha = 0.2) +
-  geom_smooth(method = "lm") + scale_y_continuous(breaks = c(-3,0,3)) +
+  geom_point(shape = 16, alpha = 0.2) + 
+  scale_y_continuous(breaks = c(-3,0,3)) +
   geom_hline(aes(yintercept = 0), lty = "dashed") +
   ylab("Growth residual") + xlab("Intermediate capture date") +
   theme_classic() + mythemes
@@ -863,58 +752,7 @@ growth.res.plot <-
 growth.res.plot
 ```
 
-```{r, include = FALSE}
-# growth.res.plot.grayscale <- 
-#   ggplot(growth.res, aes(x = midyear, y = resid)) +
-#   geom_point(shape = 16, col = "gray", alpha = 0.5) +
-#   geom_smooth(method = "lm", col = "black") + scale_y_continuous(breaks = c(-3,0,3)) +
-#   geom_hline(aes(yintercept = 0), lty = "dashed") +
-#   ylab("Growth residual") + xlab("Intermediate capture date") +
-#   theme_classic() + mythemes
-# 
-# growth.res.plot.grayscale
-```
-
 There doesn't appear to be any residual trend over time, indicating that growth rates are stable for the Santa Fe tortoise population.
-
-```{r, espanola-somatic-growth-GAM}
-espanola.growth.dat <- growth.dat %>%
-  filter(Island == "Española") %>%
-  droplevels()
-
-espanola.growth.gam <- bam(growth_rate_final ~ s(mid_lc) + s(ID, bs="re"), 
-                           data = espanola.growth.dat)
-
-summary(espanola.growth.gam)
-
-larga.sim = seq(min(espanola.growth.dat$mid_lc), 
-                max(espanola.growth.dat$mid_lc), length.out = 100)
-
-# espanola prediction
-newdat <- data.frame(mid_lc = larga.sim)
-espanola.pred <- predict.gam(espanola.growth.gam, newdata = newdat, 
-                             newdata.guaranteed = TRUE,
-                             exclude = "s(ID)", type = "response", 
-                             se.fit=TRUE)
-espanola.pred <- data.frame(cbind(larga.sim, espanola.pred$fit, 
-                                  espanola.pred$se.fit))
-colnames(espanola.pred) <- c("larga", "rate", "SE")
-
-### PLOT ###
-espanola.growth.plot <-  ggplot(espanola.pred, aes(x = larga, y = rate)) + 
-  geom_point(inherit.aes = FALSE, data = espanola.growth.dat, 
-             mapping = aes(x = mid_lc, y = growth_rate_final), 
-             position = "jitter", alpha = 0.2) + geom_line(size = 1.1) + 
-  geom_line(aes(y=rate - 2*SE), linetype = "dashed") + 
-  geom_line(aes(y=rate + 2*SE), linetype = "dashed") + 
-  geom_line(mapping = aes(y = 0), linetype = "dashed", col = "black") + 
-  labs(y = expression(paste("Growth rate (cm yr"^{-1},")")), 
-       x = "Intermediate curved carapace length (cm)") + 
-  theme_classic() + mythemes +
-  scale_shape_manual(values=c(2,1)) + ylim(-2.5, 10)
-
-espanola.growth.plot
-```
 
 Let's compare Santa Fe and Española growth rates in the same model.
 
@@ -923,6 +761,7 @@ growth.dat$Island_ord = ordered(growth.dat$Island)
 
 hood.growth.gam <- bam(growth_rate_final ~ Island + s(mid_lc) + 
                          s(mid_lc, by = Island_ord) + 
+                         s(spi5) +
                          s(ID, bs="re"), data = growth.dat)
 
 summary(hood.growth.gam)
@@ -955,7 +794,8 @@ newdat = data.frame(mid_lc = length.sim,
                     Island = as.factor(c(rep("Santa Fe", 100), 
                                          rep("Española", 100))),
                     Island_ord = as.factor(c(rep("Santa Fe", 100), 
-                                             rep("Española", 100))))
+                                             rep("Española", 100))),
+                    spi5 = 0)
 
 hood.pred <- predict.gam(hood.growth.gam, newdata = newdat, 
                          newdata.guaranteed = TRUE,
@@ -987,32 +827,6 @@ hood.growth.plot <- ggplot(hood.pred,
 
 hood.growth.plot
 ```
-
-```{r, include = FALSE}
-# hood.growth.plot.grayscale <- ggplot(hood.pred, 
-#                            aes(x = length, y = rate, 
-#                                fill = Island, color = Island, lty = Island)) + 
-#   geom_point(inherit.aes = FALSE, 
-#              data = growth.dat[growth.dat$Island == "Santa Fe",], 
-#              mapping = aes(x = mid_lc, y = growth_rate_final), 
-#              position = "jitter", shape = 21, alpha = 0.3, col = "black") + 
-#   geom_point(inherit.aes = FALSE, 
-#              data = growth.dat[growth.dat$Island == "Española",], 
-#              mapping = aes(x = mid_lc, y = growth_rate_final), 
-#              position = "jitter", shape = 24, alpha = 0.3, col = "gray50") + 
-#   geom_ribbon(aes(ymin = rate - 1.96*SE, ymax = rate + 1.96*SE), 
-#               color = "transparent", alpha = 0.2) +
-#   geom_line(size = 1.1) + 
-#   scale_color_manual(values = c("gray30", "black")) +
-#   scale_fill_manual(values = c("gray30", "black")) +
-#   scale_linetype_manual(values = c("dashed", "solid")) +
-#   labs(y = expression(paste("Growth rate (cm yr"^{-1},")")), 
-#        x = "Intermediate length (cm)") + theme_classic() + mythemes +
-#   ylim(0, 7.5) + theme(legend.position = "bottom")
-# 
-# hood.growth.plot.grayscale
-```
-
 There are in fact some differences in the growth rates between tortoises on Santa Fe and Española. The Santa Fe tortoises begin with slower growth rates than those on Española. This could possibly be explained by the harsher environment on Santa Fe. Juvenile tortoises may have more limited foraging opportunities during the day in the hot season because of there is less cover. Release ages could also play a role, as Santa Fe tortoises were on average older upon release than Española tortoises. Tortoises may require a few years to acclimate to their environment after being repatriated.
 
 After they exceed about 40 cm in length, the Santa Fe tortoises begin to growing faster than their counterparts on Española. This would make sense, considering the greater food resources on Santa Fe. There might simply be more food for them to eat.
@@ -1021,37 +835,29 @@ Of course, climate may play an important role in this contrast. The Española to
 
 Let's create a composite growth figure to include in the manuscript.
 
-```{r, composite-growth-fig, fig.height = 7, fig.width = 10}
+```{r, composite-growth-fig, fig.height = 7, fig.width = 7}
+library(ggpubr)
 growth.fig <- 
-  ggarrange(hood.bc.plot, hood.growth.plot, bc.res.plot, growth.res.plot,
-            nrow = 2, ncol = 2, common.legend = TRUE, legend = "top",
-            labels = c("a", "b", "c", "d"), label.x = c(0.15, 0.15, 0.15, 0.15))
+  ggarrange(hood.bc.plot, hood.growth.plot,
+            nrow = 2, common.legend = TRUE, legend = "top",
+            labels = c("a", "b"), label.x = c(0.1, 0.1))
 growth.fig
-```
 
-```{r, include = FALSE}
-# growth.fig.grayscale <- 
-#   ggarrange(hood.bc.plot.grayscale, hood.growth.plot.grayscale, 
-#             bc.res.plot.grayscale, growth.res.plot.grayscale,
-#             nrow = 2, ncol = 2, common.legend = TRUE, legend = "top",
-#             labels = c("a", "b", "c", "d"), label.x = c(0.15, 0.15, 0.15, 0.15))
-# growth.fig.grayscale
-# 
-# ggsave(plot = growth.fig.grayscale, file = "hood_growth_figs_grayscale.png", 
-#        width = 10, height = 7, units = "in", dpi = 600)
+ggsave("images/hoodensis_bc_growth_fig.jpg", device = "jpeg",
+       width = 7, height = 7, units = "in", dpi = 600)
 ```
 
 # Survival
 ***
 ## Model preparation
 
-Here we'll use capture-mark-recapture population models (i.e., Cormack-Jolly-Seber or CJS models) to get an estimate of survival rates of the three release cohorts of tortoises on Santa Fe.
+Here we'll use capture-mark-recapture population models (i.e., Cormack-Jolly-Seber or CJS models) to get an estimate of survival rates of the three release cohorts of tortoises on Santa Fe. I'll implement these models in Program MARK via the `RMark` package.
 
 First we need to reformat the mark-recapture data to create individual encounter histories for program MARK.
 
 ```{r, prepare-survival-data-for-RMark}
-## Aggregate by tag/mark ID to create annual encounter histories
 library(reshape2)
+## Aggregate by tag/mark ID to create annual encounter histories
 santafe.ch <- santafe.raw %>%
   dplyr::select(c("PIT_final", "Occasion", "LC_capture", "Age_actual", 
            "Age_release", "LC_release", "Peso_release", "Cohort")) %>%
@@ -1101,7 +907,6 @@ tortoises.process <-
                groups = c("release_cohort", "age_release"), age.var = 2,
                initial.ages = c(4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5))
  
-library(kableExtra)
 kable(tortoises.process$data, "html", 
       caption = "Tortoise capture data in Santa Fe") %>%
   kable_styling(bootstrap_options = c("striped", "condensed")) %>% 
@@ -1221,8 +1026,10 @@ The model states there is an overall annual survival rate of 0.947.
 Because there was model uncertainty, we should still model average to plot our survival estimates.
 
 ```{r, model-averaging-for-CJS-models}
+set.seed(101)
 # survival
-tortoises.mod.avg.phi <- model.average(tortoises.results,"Phi", vcv=TRUE, drop = FALSE)
+tortoises.mod.avg.phi <- model.average(tortoises.results,"Phi", 
+                                       vcv=TRUE, drop = FALSE)
 tortoises.mod.avg.phi.unique <- unique(tortoises.mod.avg.phi$estimates[,2:5])
 
 kable(tortoises.mod.avg.phi.unique, "html", 
@@ -1514,7 +1321,7 @@ tortoises.mod.avg.phi.unique$year <-
   c(rep(c(2015,2015,2016,2017,2017,2018,2019,2019,2019),3))
 
 tortoises.phi.df <- tortoises.mod.avg.phi.unique %>%
-  filter(ucl != 1) %>%
+  filter(lcl > 0.01) %>% # remove the final 2019 survival estimate with inflated variances
   group_by(year) %>%
   summarise(phi = mean(estimate),
             se = mean(se),
@@ -1540,28 +1347,34 @@ espanola.phi <- data.frame(stage = c("juvenile", "subadult/adult"),
 santafe.phi.plot <- 
   ggplot(tortoises.phi.df,  aes(x = time, y = phi)) +
   geom_hline(data = espanola.phi, inherit.aes = FALSE, 
-             aes(yintercept = phi), lty = "dashed", lwd = 1.1, col = "grey") +
-  geom_pointrange(aes(ymin = lcl, ymax = ucl)) +
-  geom_point(size = 2) +
-  labs(y = expression(paste("Apparent survival ( ", phi, ")")), x = "Year") + 
+             aes(yintercept = phi), 
+             lty = "dashed", lwd = 1.1, col = "grey") +
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), 
+                  shape = 21, fill = "black", fatten = 3, 
+                  color = "black", size = 1.1, stroke = 1.3) +
+  labs(y = expression(paste("Apparent survival ( ", phi, " )")), x = "Year") + 
   scale_y_continuous(limits = c(floor_any(min(tortoises.phi.df$lcl),0.05), 1), 
                      labels = scaleFUN) + 
   xlim(2015,2020.5) + 
   theme(legend.position = "top") + 
   annotate("text", x = 2020.15, y = 0.94, 
-           label = "juvenile", size = 4, col = "grey25") +
+           label = "juvenile", size = 4, col = "black") +
   annotate("text", x = 2020.15, y = 0.99, 
-           label = "(sub)adult", size = 4, col = "grey25") + 
+           label = "(sub)adult", size = 4, col = "black") + 
   theme_classic() + mythemes
+
+santafe.phi.plot
   
 santafe.p.plot <- 
   ggplot(det.df, aes(x = year, y = estimate)) +  geom_line() + 
-  geom_pointrange(aes(ymin = lcl, ymax = ucl)) +
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), 
+                  shape = 21, fill = "black", fatten = 8) +
   geom_hline(aes(yintercept = mean(det.df$estimate)), lty = "dashed") +
-  geom_point(size = 2) +
   ylab("Detection probability") + xlab("Year") +
   scale_y_continuous(limits = c(0.3,1), labels = scaleFUN) +
   xlim(2015,2020.5) + theme_classic() + mythemes
+
+santafe.p.plot
 
 santafe.n.plot <- 
   ggplot(data = total_pop) +
@@ -1578,30 +1391,33 @@ santafe.n.plot <-
            x = decimal_date(as.Date("2019-02-01", format = "%Y-%m-%d")),
            y = 551+34, label = "Release 3", size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-05", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
            y = 551, label = 551, size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-05", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
            y = last(total_pop$N_hat), 
            label = round(last(total_pop$N_hat),0), size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-05", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
            y = last(total_pop$N_hat) * 0.88, 
            label = paste("(",round(last(total_pop$N_hat)/551*100,1),"%",")", 
                          sep = ""), size = 4) +
   ylab("Population size") + xlab("Year") +
   xlim(2015,2020.5) + ylim(0,600) + theme_classic() + mythemes
+
+santafe.n.plot
 ```
 
 ```{r, fig.height = 6, fig.width = 9}
-# combine survival, detection, and N figures
-library(cowplot)
-ggdraw() +
-  draw_plot(santafe.phi.plot, x = 0, y = .4, width = .5, height = .6) +
-  draw_plot(santafe.p.plot, x = .5, y = .4, width = .5, height = .6) +
-  draw_plot(santafe.n.plot, x = 0, y = 0, width = 1, height = 0.4) +
-  draw_plot_label(label = c("A", "B", "C"), size = 15,
-                  x = c(0.1, 0.6, 0.1), y = c(1, 1, 0.4))
+# combine survival, abundance, and morphology figures into a 2x2 composite
+ggarrange(santafe.phi.plot + ggtitle("a"),
+          santafe.n.plot + ggtitle("b"), 
+          hood.bc.plot + ggtitle("c"),
+          hood.growth.plot + ggtitle("d"),
+          legend = "bottom", common.legend = TRUE)
+
+ggsave("images/hoodensis_demographic_outcomes.jpg", device = "jpeg",
+       width = 9, height = 7, units = "in", dpi = 600)
 ```
 
 # Population projections
@@ -1609,11 +1425,10 @@ ggdraw() +
 
 We'll make deterministic and stochastic population projections in the R package `popbio.` These will be **female-only** models, making the assumption that approximately half of all tortoise eggs become female.
 
-Let's first create our Leslie matrices.
+Let's first create our four-stage Lefkovitch matrices.
 
 ```{r}
 library(popbio)
-
 # hatching viability parameter estimates and quantiles from kevin'a ABC
 egghatchvia <- c(0.3447368, 0.2305263, 0.2636842, 0.3005263, 0.3078947, 
                  0.3447368, 0.3815789, 0.4184211, 0.418421, 0.4184211)
@@ -1806,6 +1621,10 @@ stoch.pop.plot <- ggplot(stoch.proj.df, aes(Year, N_projected)) +
 
 stoch.pop.plot
 
+# save plot
+ggsave("images/pop_projection_tortoises.jpg", device = "jpeg",
+       width = 6, height = 4, units = "in", dpi = 600)
+
 plot(extin/interactionX, type='l', lwd=2, xlab="Years into the future", 
      main="Extinction probability for Santa Fe population")
 
@@ -1835,6 +1654,10 @@ ggdraw() +
   draw_plot(stoch.pop.plot, x = 0.5, y = 0, width = 0.5, height = 0.5) +
   draw_plot_label(label = c("a", "b", "c", "d"), size = 15,
                   x = c(0.08, 0.58, 0.08, 0.58), y = c(1, 1, 0.5, 0.5))
+
+# save plot
+ggsave("images/phi_p_N_estimates.jpg", device = "jpeg",
+       width = 6, height = 4, units = "in", dpi = 600)
 ```
 
 # Dispersal
@@ -1854,6 +1677,7 @@ movements$Date <- as.Date(movements$Date,format='%m/%d/%Y')
 We should add one more column to the data frame---**Days_ellapsed**---to describe the time since release for each observation. But because there are three release dates, we really need three distinct groups of values for that column specific to their release cohorts.
 
 ```{r, process-dispersal-dates-and-export-to-GIS}
+# create shapefile
 movements2015 <- subset(movements, Cohort == "2015")
 movements2017 <- subset(movements, Cohort == "2017")
 movements2019 <- subset(movements, Cohort == "2019")
@@ -1874,12 +1698,10 @@ Let's now convert our coordinates to UTMs, calculate the distance of each point 
 I'll start by only showing the 2015 release cohort over time. Then I'll produce the same plots including the 2017 cohort. I also need to update the UTM coordinates for the Santa Fe island shapefile so they are on the same scale as the tortoise points (relative to a central release point of 0,0).
 
 ```{r}
-# create shapefile
-library(forcats)
-library(raster)
+library(sp)
 library(rgdal)
-library(sf)
-library(maptools)
+library(raster)
+# create shapefile
 coordinates(object = movements) <- ~ Longitude + Latitude
 proj4string(movements) <- CRS("+proj=longlat +datum=WGS84")
 movements.shp <- spTransform(movements, CRSobj = CRS("+init=epsg:32715"))
@@ -1905,7 +1727,6 @@ movements.data <- movements.data %>%
 ## Spatial patterns - recapture data
 
 ```{r, load-santa-fe-outline-and-put-on-same-spatial-scale-as-tortoise-data}
-library(sp)
 santafe.shp <- readOGR("data/Santa_Fe.shp", verbose=FALSE)
 santafe.shp <- spTransform(santafe.shp, CRS("+init=epsg:32715"))
 santafe <- fortify(santafe.shp)
@@ -1988,6 +1809,9 @@ plot_grid(p1, p2, p3, p4,
           ncol  = 2, 
           labels = c("1 year", "2 years", "3 years", "4 years"), 
           label_size = 20)
+
+ggsave("images/dispersal_C1_map.jpg", device = "jpeg",
+       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 The first cohort is slowly spreading over the center of the island and seems to be doubling in area almost every year since release.
@@ -2032,14 +1856,6 @@ all.traces <-
 all.traces
 ```
 
-```{r, include = FALSE}
-# all.traces.grayscale <-
-#   all.traces + geom_point(aes(x = 0, y = 0), 
-#              shape = 4, size = 2, stroke = 1.5, color = "white")+
-#   theme(plot.margin = unit(c(0,0,0,0), "mm"))
-# 
-# all.traces.grayscale
-```
 
 Interesting how tortoise movement has not been one directional. Many tortoises make large outward movements after release, only to return close to the center of the island on another occasion. These are only snapshops, so we really can't say much about tortoise movement or dispersal from these traces, other than that tortoises seem to be exploratory in these initial post-release movements.
 
@@ -2061,8 +1877,6 @@ p.final.cohorts <-
   scale_color_manual(values = c("#E69F00", "#56B4E9", "#009E73")) +
   theme_classic() + mythemes + coord_equal() + theme(legend.position="top") + 
   labs(x = "Distance from release (m)", y = "Distance from release (m)") +
-  annotate("text", x = 3500, y = 2200, label = "N", size = 8) +
-  annotate("text", x = 3500, y = 1600, label = "\u2191", size = 15) +
   theme(plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"))
 
 # Get ellipse coordinates from plot 
@@ -2088,21 +1902,23 @@ for(group in unique(pb$data[[4]]$group)){
   cohort.areas <- bind_rows(cohort.areas, dat)
 }
 
-p.final.cohorts <- 
+p.final.cohorts1 <- 
   p.final.cohorts + 
-  annotate("text", x = -2500, y = 2700, 
+  annotate("text", x = 3500, y = 2200, label = "N", size = 8) +
+  annotate("text", x = 3500, y = 1600, label = "\u2191", size = 15) +
+  annotate("text", x = -2500, y = 3000, 
            label = paste(round(cohort.areas$area_ha[cohort.areas$cohort == "1"], 
                                1), " ha (",
                          round(cohort.areas$area_perc[cohort.areas$cohort == "1"], 
                                2), "%)", sep = ""), size = 4, 
            color = cohort.areas$color[cohort.areas$cohort == "1"]) +
-  annotate("text", x = 0, y = 2700, 
+  annotate("text", x = 0, y = 3000, 
            label = paste(round(cohort.areas$area_ha[cohort.areas$cohort == "2"], 
                                1), " ha (",
                          round(cohort.areas$area_perc[cohort.areas$cohort == "2"], 
                                2), "%)", sep = ""), size = 4,
             color = cohort.areas$color[cohort.areas$cohort == "2"]) +
-  annotate("text", x = 2500, y = 2700, 
+  annotate("text", x = 2500, y = 3000, 
            label = paste(round(cohort.areas$area_ha[cohort.areas$cohort == "3"], 
                                1), " ha (",
                          round(cohort.areas$area_perc[cohort.areas$cohort == "3"], 
@@ -2110,85 +1926,9 @@ p.final.cohorts <-
             color = cohort.areas$color[cohort.areas$cohort == "3"]) +
   theme(plot.margin = unit(c(0,0,0,0), "mm"))
 
-p.final.cohorts
-```
-
-```{r, include = FALSE}
-# in grayscale
-# p.final.cohorts.grayscale <-   
-#   ggplot(data = movements.data[movements.data$occ == "March 2020" & 
-#                                    !is.na(movements.data$Cohort),], 
-#          aes(x = X_corrected, y = Y_corrected)) +
-#   geom_polygon(inherit.aes = FALSE, data = santafe, 
-#                aes(x = santafe$X, y = santafe$Y), fill = "grey") +
-#   geom_point(shape = 16, alpha = 0.2) +
-#   geom_point(inherit.aes = FALSE, aes(x = 0, y = 0), 
-#              shape = 4, size = 2, stroke = 1.5, color = "white") +
-#   stat_ellipse(aes(x = X_corrected, y = Y_corrected, lty = Cohort),
-#                level = 0.95, lwd = 0.9) +
-#   scale_y_continuous(limits = c(-2100, 3100), breaks = seq(-2000, 2000, 1000)) +
-#   scale_linetype_manual(values = c("dotted", "solid", "dashed")) +
-#   theme_classic() + mythemes + coord_equal() + theme(legend.position="top") + 
-#   labs(x = "Distance from release (m)", y = "Distance from release (m)") +
-#   annotate("text", x = 3500, y = 2200, label = "N", size = 8) +
-#   annotate("text", x = 3500, y = 1600, label = "\u2191", size = 15)
-
-# Get ellipse coordinates from plot 
-# (from StackOverflow: https://tinyurl.com/yaulv58n)
-# pb <- ggplot_build(p.final.cohorts)
-# cohort.areas <- NULL
-# for(group in unique(pb$data[[4]]$group)){
-#   el = pb$data[[4]]
-#   el.group = el[el$group == group,]
-#   el.group.xy = el.group[c("x","y")]
-#   # Center of ellipse
-#   ctr = MASS::cov.trob(el.group.xy)$center 
-#   # Calculate distance to center from each point on the ellipse
-#   dist2center <- sqrt(rowSums((t(t(el.group.xy)-ctr))^2))
-#   # Calculate area of ellipse from semi-major and semi-minor axes. 
-#   # These are, respectively, the largest and smallest values of dist2center. 
-#   area_ha <- pi*min(dist2center)*max(dist2center)/10000
-#   dat <- data.frame(cohort = group,
-#                     linetype = el.group$linetype,
-#                     area_ha = area_ha,
-#                     area_perc = area_ha/2473 * 100,
-#                     stringsAsFactors = FALSE)
-#   cohort.areas <- bind_rows(cohort.areas, dat)
-# }
-# 
-# p.final.cohorts.grayscale <- 
-#   p.final.cohorts.grayscale + 
-#   annotate("text", x = -2500, y = 2900, 
-#            label = paste("2015: \n", round(cohort.areas$area_ha[cohort.areas$cohort == "1"], 
-#                                1), " ha (",
-#                          round(cohort.areas$area_perc[cohort.areas$cohort == "1"], 
-#                                2), "%)", sep = ""), size = 4) +
-#   annotate("text", x = 0, y = 2900, 
-#            label = paste("2017: \n", round(cohort.areas$area_ha[cohort.areas$cohort == "2"], 
-#                                1), " ha (",
-#                          round(cohort.areas$area_perc[cohort.areas$cohort == "2"], 
-#                                2), "%)", sep = ""), size = 4) +
-#   annotate("text", x = 2500, y = 2900, 
-#            label = paste("2019: \n", round(cohort.areas$area_ha[cohort.areas$cohort == "3"], 
-#                                1), " ha (",
-#                          round(cohort.areas$area_perc[cohort.areas$cohort == "3"], 
-#                                2), "%)", sep = ""), size = 4) +
-#   theme(plot.margin = unit(c(0,0,0,0), "mm"))
-# 
-# p.final.cohorts.grayscale
-```
-
-```{r, include = FALSE}
-# trace.ellipses.grayscale <- ggarrange(p.final.cohorts.grayscale, 
-#                                       all.traces.grayscale,
-#                                       align = "hv", widths = c(1,1),
-#                                       nrow = 2, ncol = 1, labels = c("A", "B"))
-# 
-# trace.ellipses.grayscale
-# 
-# ggsave(plot = trace.ellipses.grayscale, 
-#        filename = "tortoise_dist_traces_grayscale.png", device = "png",
-#        width = 5.5, height = 9, units = "in", dpi = 600)
+p.final.cohorts1
+ggsave("images/distribution_cohorts_2020.jpg", device = "jpeg",
+       width = 6, height = 5, units = "in", dpi = 600)
 ```
 
 These final distributions seem to reinforce the "doubling" seen in the first cohort's dispersal distances over time. The first cohort is distributed over an area roughly twice the size of the second cohort, which is also roughly twice as widespread as the third cohort.
@@ -2218,6 +1958,8 @@ p.final + annotate("text", x = 0, y = 1800,
                                  round(stat.ellipse.area(p.final)/2473*100, 1), 
                                  "%)", 
                                  sep = ""), size = 5)
+ggsave("images/distribution_total_2020.jpg", device = "jpeg",
+       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 Let's now examine how tortoise distributions vary over time with kernel density maps.
@@ -2335,6 +2077,8 @@ total.density.plots <-
   layer(sp.points(release.pt, pch = 4, cex=1, col="red", alpha = 0.7))
 
 total.density.plots
+ggsave("images/kernel_density_2015_2020.jpg", device = "jpeg",
+       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 In this next composite figure I'm only showing densities for the first release cohort. 
@@ -2357,6 +2101,9 @@ levelplot(tortoise.brick.2015, par.settings = viridisTheme,
           par.strip.text = list(cex = 1.5), layout = c(3,2),
           main = list("Dispersal of first release cohort", cex = 1.5)) +
   layer(sp.points(release.pt, pch = 4, cex=1, col="red", alpha = 0.7))
+
+ggsave("images/kernel_density_2015_2020_C1.jpg", device = "jpeg",
+       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 At four and a half years since release, the first release cohort is widely dispersed across several spatial clusters.
@@ -2507,7 +2254,8 @@ Let's make this previous visualization another way using ridgeplots. I'll align 
 library(ggridges)
 library(purrr)
 # cumulative N plot
-total_pop %>%
+N.plot <-
+  total_pop %>%
   map_df(rev) %>%
   ggplot(aes(x = Year, y = N_hat)) +
   scale_x_reverse() +
@@ -2515,9 +2263,10 @@ total_pop %>%
   geom_ribbon(aes(x = Year, ymin = 0, ymax = N_hat), fill = "grey") +
   coord_flip() + scale_y_continuous(limits = c(0,600), breaks = c(0,250,500)) +
   scale_x_reverse(limits = c(2020.4, 2014.3), breaks = c(2015:2020)) +
-  theme_bw() + mythemes + xlab("Year") + ylab("N-est") -> N.plot
+  theme_bw() + mythemes + xlab("Year") + ylab("N-est")
 
-movements.data %>%
+disp.plot <-
+  movements.data %>%
   filter(Days_ellapsed > 0 & occ != "April 2019") %>%
   droplevels() %>%
   ggplot(aes(x = dist, y = fct_rev(occ))) +
@@ -2531,13 +2280,13 @@ movements.data %>%
   theme(axis.title.y=element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank()) +
-  annotate("text", x = 1500, y = 1.3, label = "March 2020") +
-  annotate("text", x = 1500, y = 2.3, label = "August 2019") +
-  annotate("text", x = 1500, y = 3.3, label = "June 2018") +
-  annotate("text", x = 1500, y = 4.3, label = "June 2017") +
-  annotate("text", x = 1500, y = 5.3, label = "June 2016") +
-  annotate("text", x = 1500, y = 6.3, label = "August 2015") +
-  labs(x = "Distance from release (m)", y = NULL) -> disp.plot
+  annotate("text", x = 1500, y = 1.3, label = "March 2020", size = 5) +
+  annotate("text", x = 1500, y = 2.3, label = "August 2019", size = 5) +
+  annotate("text", x = 1500, y = 3.3, label = "June 2018", size = 5) +
+  annotate("text", x = 1500, y = 4.3, label = "June 2017", size = 5) +
+  annotate("text", x = 1500, y = 5.3, label = "June 2016", size = 5) +
+  annotate("text", x = 1500, y = 6.3, label = "August 2015", size = 5) +
+  labs(x = "Distance from release (m)", y = NULL)
 
 ggarrange(N.plot, disp.plot, widths = c(1, 4), ncol = 2)
 ```
@@ -2702,6 +2451,59 @@ traces.tele.ind
 
 ## Summary
 
+```{r, echo = FALSE, fig.height = 9, fig.width = 11}
+traces.ms <- 
+  ggplot(data = movements.data, aes(x = X_corrected, y = Y_corrected)) +
+  geom_polygon(data = santafe, 
+               aes(x = santafe$X, y = santafe$Y), fill = "grey") +
+  geom_path(aes(group = PIT_final), alpha = 0.2, lwd = 0.6) +
+  geom_point(aes(x = 0, y = 0), 
+             shape = 4, size = 2, stroke = 1.5, color = "red") +
+  theme_bw() + mythemes + coord_equal() +
+  theme(plot.margin = unit(c(0,5,0,0), "mm"), title = element_text(size = 5)) +
+  scale_x_continuous(limits = c(-3600, 3700)) +
+  scale_y_continuous(limits = c(-2300, 2500)) +
+  labs(x = "Distance from release (m)", 
+       y = "Distance from release (m)", title = "c") 
+  
+
+top <- ggarrange(N.plot + ggtitle("a") + theme(title = element_text(size = 6)), 
+                 disp.plot + ggtitle("b") + theme(title = element_text(size = 6)), 
+                 widths = c(1, 4), ncol = 2)
+
+den2020pts <- rasterToPoints(tortoise.brick.adj$Y2020, spatial = TRUE)
+den2020df  <- data.frame(den2020pts)
+den2020df$X_corrected <- den2020df$x - 827253
+den2020df$Y_corrected <- den2020df$y - 9909160
+
+library(scico)
+den2020 <- ggplot() + 
+  geom_raster(data = den2020df , 
+              aes(x = X_corrected, y = Y_corrected, fill = Y2020)) +
+  geom_point(inherit.aes = FALSE, aes(x = 0, y = 0), 
+             shape = 4, size = 2, stroke = 1.5, color = "red", alpha = 0.5) +
+  theme_bw() + mythemes + coord_equal() + theme(legend.position = "right") +
+  theme(plot.margin = unit(c(0,0,0,0), "mm")) +
+  scale_x_continuous(limits = c(-3600, 3700)) +
+  scale_y_continuous(limits = c(-2300, 2500)) +
+  labs(x = "Distance from release (m)", y = NULL, title = "d",
+       fill = "Density (per ha)") + 
+  scale_fill_scico(palette = 'batlow') +
+  theme(legend.key.width=unit(1,"cm"), axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(), title = element_text(size = 5))
+
+bottom <- plot_grid(traces.ms + ggtitle("c") + theme(title = element_text(size = 6)),
+                    den2020 + ggtitle("d") + theme(title = element_text(size = 6)), 
+                    ncol = 2, axis = "tblr", 
+                    rel_widths = c(1, 1.14), align = "h")
+
+jpeg("images/dispersal_plots.jpg", width = 11, height = 9, units = "in", res = 600)
+
+grid.arrange(top, bottom, nrow = 2)
+
+dev.off()
+```
+
 Let's make one final summary table of our dispersal statistics.
 
 ```{r, echo = FALSE}
@@ -2746,7 +2548,7 @@ disp.table %>%
 write.csv(disp.table, "data/tortoise_dispersal_summary.csv")
 ```
 
-# Iguana population response
+# Ecosystem response
 
 Let's examine our Santa Fe land iguana data from 2011 to 2020 to see whether the population has been affected by the tortoise introduction so far. 
 
