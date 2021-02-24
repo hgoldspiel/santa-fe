@@ -12,6 +12,7 @@ output:
     code_folding: show
 editor_options: 
   chunk_output_type: inline
+bibliography: literature.bib
 ---
 
 <style>
@@ -29,7 +30,7 @@ wd <- getwd()
 library(knitr)
 library(kableExtra)
 knitr::opts_knit$set(root.dir = wd)
-knitr::opts_chunk$set(fig.align = "center", fig.pos = "h", 
+knitr::opts_chunk$set(fig.align = "center", fig.pos = "h", fig.path = 'figures/',
                       message = FALSE, warning = FALSE, dpi = 600)
 
 #load some R packages
@@ -61,9 +62,9 @@ I'll also examine potential impacts of tortoises on the Santa Fe land iguana pop
 # Growth
 ***
 
-## Tortoise morphology---Santa Fe
+## Body condition
 
-First I'll load the tortoise data with body metrics and time intervals. 
+First I'll load the Santa Fe tortoise data with body metrics and time intervals. 
 
 ```{r, load-data}
 library(readxl)
@@ -77,7 +78,7 @@ sf_recaps <- suppressMessages(read_excel(
 head(sf_recaps)
 ```
 
-We'll change some column names and create some extra survey variables. I'll clean everything in a long chunk (hidden) and create a new object for examining growth patterns.
+We'll change some column names and create some extra survey variables. I'll clean everything in a long chunk (hidden, see the accompanying .Rmd file for the complete source code) and create a new object for examining growth patterns.
 
 ```{r, clean-Santa-Fe-tortoise-recapture-data-for-growth-GAMs, echo = FALSE}
 # reformat recapture data
@@ -195,7 +196,7 @@ We have some measurement errors and potential outliers in the data. We'll label 
 
 We might have to manually label some additional measurements as outliers if they fall in an increment with a small sample size but are clearly off the length versus weight curve. 
 
-```{r, inspect-scatterplot-for-outliers-among-Santa-Fe-tortoises}
+```{r, SF-morphology-outliers}
 # get thresholds for extreme outliers (3 * IQR)
 santafe.thresholds <- santafe.raw %>%
   mutate(lc_cat_2 = floor_any(LC_capture, 2)) %>%
@@ -232,9 +233,7 @@ santafe.clean <- santafe.raw[santafe.raw$unique_id %notin%
 santafe.clean$PIT_final <- as.factor(santafe.clean$PIT_final)
 ```
 
-### Body condition
-
-Here I'll model the simple relationship between body mass and size (curved carapace length) using generalized additive mixed models (GAMMs), including a random effect for tortoise ID (PIT tag). This will allow us to estimate a body condition function, while also accounting for the variation in individual morphology and growth patterns. We can do this in the `mgcv` package (Wood, 2011).
+Here I'll model the simple relationship between body mass and size (curved carapace length) using generalized additive mixed models (GAMMs), including a random effect for tortoise ID (PIT tag). This will allow us to estimate a body condition function, while also accounting for the variation in individual morphology and growth patterns. We can do this in the `mgcv` package [@Wood2011].
 
 ```{r, body-condition-GAM-for-Santa-Fe-tortoises}
 library(mgcv)
@@ -243,7 +242,7 @@ gam.largavpeso.sf <- bam(Peso_capture ~ s(LC_capture) + s(PIT_final, bs="re"),
 summary(gam.largavpeso.sf)
 ```
 
-```{r, plot-predicted-body-condition-of-SF-tortoises}
+```{r, predicted-body-condition-of-SF-tortoises}
 library(tidymv)
 largavpeso.sf.plot <-  
   plot_smooths(model = gam.largavpeso.sf, series = LC_capture) + 
@@ -268,7 +267,7 @@ We can explore this further by platting the residuals. Let's inspect a few thing
 + Residuals by release cohort
 + Residuals by time
 
-```{r, body-cond-res-plots}
+```{r, SF-body-cond-res-plots}
 body.res <-
   santafe.clean %>%
   filter(!is.na(LC_capture) & !is.na(Peso_capture)) %>%
@@ -312,9 +311,10 @@ body.res %>%
 
 bc.res.plot
 ```
+
 There don't appear to be any differences in body condition between release cohorts. There also don't appear to be any trends in body condition over time, except for a recent uptick (heavier) in the last year.
 
-## Tortoise morphology---Española
+Let's load the morphology data from tortoises on Española Island.
 
 ```{r, read-espanola-data}
 espanola.data <- read.csv("data/espanola_tortoise_data.csv")
@@ -323,9 +323,9 @@ espanola.data <- read.csv("data/espanola_tortoise_data.csv")
 espanola.data$unique_id <- c(1:nrow(espanola.data))
 ```
 
-Let's first examine the data for potential outliers as we did before with the Santa Fe tortoises. We'll constrain our Española data to be within the same age range of our Santa Fe tortoises. We'll also omit data from 1980 to 1991 for comparing body condition, as the weight measurements during those years were filled with measurement or data entry errors that cannot be resolved.
+Let's examine the data for potential outliers as we did before with the Santa Fe tortoises. We'll constrain our Española data to be within the same age range of our Santa Fe tortoises. We'll also omit data from 1980 to 1991 for comparing body condition, as the weight measurements during those years were filled with measurement or data entry errors that cannot be resolved.
 
-```{r, look-for-Espanola-outliers}
+```{r, Espanola-outliers}
 espanola.raw <- 
   espanola.data[espanola.data$Year %notin% c(1980:1991) &
                   espanola.data$Age_capture >= min(santafe.clean$Age_actual) &
@@ -355,7 +355,7 @@ ggplot(espanola.raw, aes(x = LC_capture, y = Peso_capture)) +
   theme_classic() + mythemes
 ```
 
-There are 27 obvious outliers here that we'll remove.
+There are 27 captures here that we'll remove.
 
 ```{r}
 espanola.clean <- 
@@ -367,8 +367,6 @@ espanola.clean <-
 
 espanola.clean <- espanola.clean[!is.na(espanola.clean$Year),]
 ```
-
-### Growth GAMs
 
 Let's combine our cleaned Santa Fe and Española datasets to model both populations together and display the regional growth contrasts.
 
@@ -409,6 +407,10 @@ hood.data %>%
             sd_n = sd(n_raw)) %>% ungroup()
 ```
 
+As one final preparation for our body condition and somatic growth GAMMs, we're going to link climate information (i.e., precipitation anomalies) to the captures in this dataset. Tortoise growth rates are affected by limits made on plant productivity due to seasonal rainfall patterns and climate extremes (https://doi.org/10.1016/C2018-0-01381-X: Charney 2021; Goldspiel & Gibbs, 2021), so we want to account for this stochasticity in growth variation when comparing morphological functions on Santa Fe to those on native Española.
+
+We'll do this by converting daily precipitation records from the meteorological station at the Charles Darwin Research Station to a monthly standardized precipitation index (SPI) in the `SPEI` package [@Hayes2000]. We'll use a five-month lag period when making the index, which roughly corresponds to the length of the core wet season on Santa Fe Island. Finally, we'll link the five-month SPI series to each tortoise capture by calculating a 12-month rolling average for each capture date (i.e., tortoise growth as a function of climate variation in the last year).
+
 ```{r}
 gal.clim <- read.csv("data/pa_cdf_climate.csv")
 gal.clim$date <- as.Date(gal.clim$observation_date, format = "%m/%d/%Y")
@@ -439,6 +441,7 @@ cdf.spi <-
     spi5 = spi(gal.clim.month.mean$tot_precip,5)$fitted[5:nrow(gal.clim.month.mean),])
 
 ## create lagged SPI values to connect to body condition data (1 year rolling average)
+library(zoo)
 cdf.spi$spi5_1yr = rollmean(cdf.spi$spi5, 12, align = "right", fill = NA)
 
 find.spi.lag <- function(cap.date) {
@@ -450,15 +453,15 @@ hood.data <- hood.data %>%
 ```
 
 
-### Body condition
+Let's now model the relationship between length and weight and compare that body condition function to the Santa Fe tortoise data. We'll do this explicitly in one model by including “island” as an independent variable (i.e., as an ordered factor smooth interaction and a separate fixed effect---see @Pedersen2019).
 
-Let's model the relationship between length and weight and compare that body condition function to the Santa Fe tortoise data.
-
-```{r, contrast-SF-and-Espanola-body-condition-scatterplot}
-hood.bc.gam <- bam(Peso_capture ~ Island + s(LC_capture) +
-                   s(LC_capture, by = Island_ord) + 
-                   s(spi5_1yr) +
-                   s(ID, bs = "re"), data = hood.data)
+```{r, SF-and-Espanola-body-condition-scatterplot}
+hood.bc.gam <- bam(Peso_capture ~ 
+                     Island + 
+                     s(LC_capture) +
+                     s(LC_capture, by = Island_ord) + 
+                     s(spi5_1yr) +
+                     s(ID, bs = "re"), data = hood.data)
 
 summary(hood.bc.gam)
 
@@ -475,7 +478,7 @@ newdat = data.frame(LC_capture = larga.sim,
                     Island = island.sim,
                     spi5_1yr = 0)
 
-# predict
+# predict average curves for both locations
 hood.bc.pred <- predict.gam(hood.bc.gam, newdata = newdat,
                             exclude = "s(ID)", newdata.guaranteed = TRUE, 
                             type = "response", se.fit=TRUE)
@@ -523,7 +526,7 @@ write.csv(bc.model.summary$s.table, "data/bc_mod_smooth.csv")
 
 Let's look at the data just one other way with box plots.
 
-```{r, contrast-SF-and-Espanola-body-condition-boxplot}
+```{r, SF-and-Espanola-body-condition-boxplot}
 hood.data$LC_class <- as.factor(floor_any(hood.data$LC_capture, 10))
 
 ggplot(na.omit(hood.data[hood.data$LC_class == "20" | 
@@ -541,7 +544,7 @@ ggplot(na.omit(hood.data[hood.data$LC_class == "20" |
 
 These boxplots indicate that any small divergence in body condition specified by the GAM, is likely negligible.
 
-## Tortoise growth rates
+## Somatic growth rates
 
 Let's now compare the actual somatic growth rates for tortoises on Santa Fe and Española, using intermediate length as a predictor. 
 
@@ -657,10 +660,11 @@ growth.dat <- growth.output %>%
 Let's take a quick look at a summary of our growth dataset.
 
 ```{r, growth-dat-summary}
-growth.dat %>%
+mean.growth.rates <- 
+  growth.dat %>%
   group_by(Island) %>%
   summarise(mean_growth = mean(growth_rate_final),
-            sd_growth = sd(growth_rate_final)) -> mean.growth.rates
+            sd_growth = sd(growth_rate_final))
 
 growth.dat %>%
   group_by(ID, Island) %>%
@@ -677,9 +681,9 @@ growth.dat %>%
   ungroup()
 ```
 
-Okay now let's run a somatic growth model for just Santa Fe.
+Okay now let's run a somatic growth model for just Santa Fe. In this instance, our variable for climate variation represents the mean precipitation anomaly (SPI-5) value over each capture interval for each individual.
 
-```{r, Santa-Fe-somatic-growth-rates-GAM}
+```{r, Santa-Fe-somatic-growth-rates-GAMM}
 santafe.growth.dat <- growth.dat %>%
   filter(Island == "Santa Fe") %>%
   droplevels()
@@ -693,7 +697,7 @@ santafe.growth.gam <- bam(growth_rate_final ~
 summary(santafe.growth.gam)
 ```
 
-```{r, plot-predicted-somatic-growth-rates-of-SF-tortoises}
+```{r, predicted-somatic-growth-rates-of-SF-tortoises}
 larga.sim = seq(min(na.omit(santafe.growth.dat$mid_lc)), 
                 max(na.omit(santafe.growth.dat$mid_lc)), length.out = 100)
 
@@ -722,11 +726,11 @@ santafe.growth.plot <-  ggplot(santafe.pred, aes(x = larga, y = rate)) +
 santafe.growth.plot 
 ```
 
-The Santa Fe tortoises are growing steadily. 
+The Santa Fe tortoises are growing steadily, with rates plateauing at just over 4 cm / yr once they reach 35 cm in length. 
 
 Let's examine the residuals over time.
 
-```{r, fig.width = 7, fig.height = 4}
+```{r, santa-fe-growth-residuals}
 santafe.cohorts <- santafe.raw %>%
   group_by(PIT_final) %>%
   summarise(ID = unique(PIT_final),
@@ -752,14 +756,16 @@ growth.res.plot <-
 growth.res.plot
 ```
 
-There doesn't appear to be any residual trend over time, indicating that growth rates are stable for the Santa Fe tortoise population.
+There doesn't appear to be any residual trend over time, indicating that growth rates have been stable for the Santa Fe tortoise population since release.
 
 Let's compare Santa Fe and Española growth rates in the same model.
 
-```{r, hoodensis-somatic-growth-GAM}
+```{r, hoodensis-somatic-growth-GAMM}
 growth.dat$Island_ord = ordered(growth.dat$Island)
 
-hood.growth.gam <- bam(growth_rate_final ~ Island + s(mid_lc) + 
+hood.growth.gam <- bam(growth_rate_final ~ 
+                         Island + 
+                         s(mid_lc) + 
                          s(mid_lc, by = Island_ord) + 
                          s(spi5) +
                          s(ID, bs="re"), data = growth.dat)
@@ -767,7 +773,7 @@ hood.growth.gam <- bam(growth_rate_final ~ Island + s(mid_lc) +
 summary(hood.growth.gam)
 ```
 
-There is a difference in growth rates between the two populations.
+There is a difference in growth rates between the two populations. Santa Fe seems to have slightly lower growth rates.
 
 Let's export this model table to a csv.
 
@@ -777,9 +783,9 @@ write.csv(growth.model.summary$p.table, "data/growth_mod_parametric.csv")
 write.csv(growth.model.summary$s.table, "data/growth_mod_smooth.csv")
 ```
 
-Now let's plot out the predicted growth rates for each population.
+Now let's plot out the predicted growth rates for each population to see how they may differ.
 
-```{r, plot-predicted-hoodensis-growth-rates}
+```{r, predicted-hoodensis-growth-rates}
 age.sim = rep(c(seq(min(na.omit(growth.dat$mid_age)), 
                 max(na.omit(growth.dat$mid_age)), length.out = 100)),2)
 
@@ -829,29 +835,26 @@ hood.growth.plot
 ```
 There are in fact some differences in the growth rates between tortoises on Santa Fe and Española. The Santa Fe tortoises begin with slower growth rates than those on Española. This could possibly be explained by the harsher environment on Santa Fe. Juvenile tortoises may have more limited foraging opportunities during the day in the hot season because of there is less cover. Release ages could also play a role, as Santa Fe tortoises were on average older upon release than Española tortoises. Tortoises may require a few years to acclimate to their environment after being repatriated.
 
-After they exceed about 40 cm in length, the Santa Fe tortoises begin to growing faster than their counterparts on Española. This would make sense, considering the greater food resources on Santa Fe. There might simply be more food for them to eat.
+After they exceed about 40 cm in length, the Santa Fe tortoises begin to grow faster than their counterparts on Española. This would make sense, considering the greater food resources on Santa Fe. There might simply be more food for them to eat. Still, the confidence intervals overlap for most of these population-level growth functions.
 
-Of course, climate may play an important role in this contrast. The Española tortoise program spanned almost 50 years from 1975 to present. The Santa Fe program did not begin until 2015. The different time frames mean that we are capturing growth during different periods of climate variation that have unclear effects on tortoise growth.
-
-Let's create a composite growth figure to include in the manuscript.
+Let's create a composite growth figure.
 
 ```{r, composite-growth-fig, fig.height = 7, fig.width = 7}
 library(ggpubr)
+
 growth.fig <- 
   ggarrange(hood.bc.plot, hood.growth.plot,
             nrow = 2, common.legend = TRUE, legend = "top",
             labels = c("a", "b"), label.x = c(0.1, 0.1))
-growth.fig
 
-ggsave("images/hoodensis_bc_growth_fig.jpg", device = "jpeg",
-       width = 7, height = 7, units = "in", dpi = 600)
+growth.fig
 ```
 
 # Survival
 ***
 ## Model preparation
 
-Here we'll use capture-mark-recapture population models (i.e., Cormack-Jolly-Seber or CJS models) to get an estimate of survival rates of the three release cohorts of tortoises on Santa Fe. I'll implement these models in Program MARK via the `RMark` package.
+Here we'll use capture-mark-recapture population models (i.e., Cormack-Jolly-Seber or CJS models) [@Cormack1964; @Estimates2013; @Seber1965] to get an estimate of survival rates of the three release cohorts of tortoises on Santa Fe. I'll implement these models in Program MARK [@White1999] via the `RMark` package.
 
 First we need to reformat the mark-recapture data to create individual encounter histories for program MARK.
 
@@ -860,13 +863,14 @@ library(reshape2)
 ## Aggregate by tag/mark ID to create annual encounter histories
 santafe.ch <- santafe.raw %>%
   dplyr::select(c("PIT_final", "Occasion", "LC_capture", "Age_actual", 
-           "Age_release", "LC_release", "Peso_release", "Cohort")) %>%
+                  "Age_release", "LC_release", "Peso_release", "Cohort")) %>%
   mutate(PIT = as.factor(PIT_final),
          Cohort = as.factor(Cohort)) %>%
   group_by(PIT, Occasion, Cohort) %>%
   summarise_all(mean) %>%
   dcast(PIT + Age_release + LC_release + Peso_release + Cohort ~ Occasion) %>%
-  mutate_at(c(as.character(1:10)), ~ifelse(is.na(.), 0, 1))
+  mutate_at(c(as.character(1:10)), ~ifelse(is.na(.), 0, 1)) %>%
+  ungroup()
   
 colnames(santafe.ch) <- c("PIT", "age_release", "length", "weight", 
                           "release_cohort",  "T0", "T0_17", "T1", "T1_83",
@@ -895,7 +899,9 @@ tortoises <- import.chdata("data/santafe_ch.txt", header = TRUE,
 effortcov <- data.frame(read.csv("data/tortoise_survey_effort.csv"))
 ```
 
-Now we'll process the input data for CJS. Because there were uneven time intervals between tortoise surveys we'll have to be careful here and specify the exact amount of time between surveys for the models to estimates annual survival properly.
+Survey effort represents "person-days" for each survey occasion.
+
+Now we'll process the input data for CJS. Because there were uneven time intervals between tortoise surveys we'll have to be careful here and specify the exact amount of time (in decimal years) between surveys for the models to estimates annual survival properly.
 
 ```{r, process-data-for-juvenile-CJS}
 # make process data
@@ -946,7 +952,7 @@ kable(tortoises.ddl[[2]][], "html",
 ```
 <br>
 
-Now let's build models. We'll consider four possible survival models in which survival varies temporaly, by release size, or release cohort. We'll also consider whether detection varies by year or effort.
+Now let's build models. We'll consider four possible survival models in which survival varies temporally, by release size, or release cohort. We'll also consider whether detection varies by year, tortoise size, or effort.
 
 We'll run all combinations of these models as well as nulls---`Phi(.)` and `p(.)`---for a total of 16 CJS models.
 
@@ -967,6 +973,7 @@ p.length = list(formula=~length)
 Let's first examine goodness of fit for our data before ranking models.
 
 ```{r, GoF-for-adult-CJS}
+set.seed(1)
 RGOF <- release.gof(tortoises.process)
 RGOF
 chat <- RGOF$Chi.square[3]/RGOF$df[3]
@@ -1005,7 +1012,7 @@ write.csv(aic.table.tortoises[,3:8], "data/santafe_CJS_aictab_2020.csv")
 ```
 <br>
 
-It doesn't look like any variable strongly influences survival, as the top survival model is the null model Phi(.). There is some strong evidence for time-varying detection, but not much support for effort as a driver of detection variability.
+It doesn't look like any variable strongly influences survival, as the top survival model is the null mode---Phi(.). There is some strong evidence for time-varying detection, but not much support for effort as a driver of detection variability.
 
 Let's look at what the top model says about apparent survival.
 
@@ -1023,7 +1030,7 @@ kable(tortoises.results$Phi.dot.p.time$results$real, "html",
 
 The model states there is an overall annual survival rate of 0.947.
 
-Because there was model uncertainty, we should still model average to plot our survival estimates.
+Because there was model uncertainty, we should still model average our survival estimates to get probabilities for each year for plotting later on.
 
 ```{r, model-averaging-for-CJS-models}
 set.seed(101)
@@ -1368,7 +1375,8 @@ santafe.phi.plot
 santafe.p.plot <- 
   ggplot(det.df, aes(x = year, y = estimate)) +  geom_line() + 
   geom_pointrange(aes(ymin = lcl, ymax = ucl), 
-                  shape = 21, fill = "black", fatten = 8) +
+                  shape = 21, fill = "black", fatten = 3, 
+                  color = "black", size = 1.1, stroke = 1.3) +
   geom_hline(aes(yintercept = mean(det.df$estimate)), lty = "dashed") +
   ylab("Detection probability") + xlab("Year") +
   scale_y_continuous(limits = c(0.3,1), labels = scaleFUN) +
@@ -1391,14 +1399,14 @@ santafe.n.plot <-
            x = decimal_date(as.Date("2019-02-01", format = "%Y-%m-%d")),
            y = 551+34, label = "Release 3", size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-25", format = "%Y-%m-%d")),
            y = 551, label = 551, size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-25", format = "%Y-%m-%d")),
            y = last(total_pop$N_hat), 
            label = round(last(total_pop$N_hat),0), size = 4) +
   annotate("text", 
-           x = decimal_date(as.Date("2020-05-30", format = "%Y-%m-%d")),
+           x = decimal_date(as.Date("2020-05-01", format = "%Y-%m-%d")),
            y = last(total_pop$N_hat) * 0.88, 
            label = paste("(",round(last(total_pop$N_hat)/551*100,1),"%",")", 
                          sep = ""), size = 4) +
@@ -1408,16 +1416,13 @@ santafe.n.plot <-
 santafe.n.plot
 ```
 
-```{r, fig.height = 6, fig.width = 9}
+```{r, hoodensis-demographic-outcomes, fig.height = 7, fig.width = 9}
 # combine survival, abundance, and morphology figures into a 2x2 composite
 ggarrange(santafe.phi.plot + ggtitle("a"),
           santafe.n.plot + ggtitle("b"), 
           hood.bc.plot + ggtitle("c"),
           hood.growth.plot + ggtitle("d"),
           legend = "bottom", common.legend = TRUE)
-
-ggsave("images/hoodensis_demographic_outcomes.jpg", device = "jpeg",
-       width = 9, height = 7, units = "in", dpi = 600)
 ```
 
 # Population projections
@@ -1442,42 +1447,43 @@ n_2020 <- c(0, 0, round(last(total_pop$N_hat)/2), 20)
 # vital rates
 propfem <- 0.5 # proportion of population that is female
 repro <- 17 # reproductive age
-# mean annual number of female eggs produced
-F1 <- 3
-F1_lwr <- 2 
-F1_upr <- 4 
+
 # survivorship from egg to juvenile (age 1) (from Kevin's Espnola ABC)
 G1 <- egghatchvia["mean"] 
 G1_lwr <- egghatchvia["p025"]
 G1_upr <- egghatchvia["p975"]
 # annual survival, phi (1-4 yrs)
-p1 <- 0.75 
-p1_lwr <- 0.6
-p1_upr <- 0.9
+s1 <- 0.75 
+s1_lwr <- 0.6
+s1_upr <- 0.9
 # young juvenile stage survival parameter for matrix
-P1 <- (1-p1^(3-1))*p1/(1-p1^3)
-P1_lwr <- (1-p1_lwr^(3-1))*p1_lwr/(1-p1_lwr^3)
-P1_upr <- (1-p1_upr^(3-1))*p1_upr/(1-p1_upr^3)
+P1 <- ((1-s1^(3-1))/(1-s1^3))*s1
+P1_lwr <- ((1-s1_lwr^(3-1))/(1-s1_lwr^3))*s1_lwr
+P1_upr <- ((1-s1_upr^(3-1))/(1-s1_upr^3))*s1_upr
 # juvenile/subadult survival (4-17 yrs) (Santa Fe rates)
-p2 <- tortoises.results$Phi.dot.p.time$results$real$estimate[1]
-p2_lwr <- tortoises.results$Phi.dot.p.time$results$real$lcl[1]
-p2_upr <- tortoises.results$Phi.dot.p.time$results$real$ucl[1]
+s2 <- tortoises.results$Phi.dot.p.time$results$real$estimate[1]
+s2_lwr <- tortoises.results$Phi.dot.p.time$results$real$lcl[1]
+s2_upr <- tortoises.results$Phi.dot.p.time$results$real$ucl[1]
 # juvenile/subadult stage survival parameter for matrix
-P2 <- (1-p2^(13-1))*p2/(1-p2^13)
-P2_lwr <- (1-p2_lwr^(13-1))*p2_lwr/(1-p2_lwr^13)
-P2_upr <- (1-p2_upr^(13-1))*p2_upr/(1-p2_upr^13)
+P2 <- ((1-s2^(13-1))/(1-s2^13))*s2
+P2_lwr <- ((1-s2_lwr^(13-1))/(1-s2_lwr^13))*s2_lwr
+P2_upr <- ((1-s2_upr^(13-1))/(1-s2_upr^13))*s2_upr
 # survivorship from 1 to 4 (using the range from Gibbs et al. 2014)
-G2 <- round(p1^3*(1-p1)/(1-p1^3),3) 
-G2_lwr <- round(p1_lwr^3*(1-p1_lwr)/(1-p1_lwr^3),3)
-G2_upr <- round(p1_upr^3*(1-p1_upr)/(1-p1_upr^3),3)
+G2 <- round(s1^3*(1-s1)/(1-s1^3),3) 
+G2_lwr <- round(s1_lwr^3*(1-s1_lwr)/(1-s1_lwr^3),3)
+G2_upr <- round(s1_upr^3*(1-s1_upr)/(1-s1_upr^3),3)
 # survivorship from 4 to 17 (using the subadult/adult survival rates from Espanola)
-G3 <- round(p2^13*(1-p2)/(1-p2^13),3) 
-G3_lwr <- round(p2_lwr^13*(1-p2_lwr)/(1-p2_lwr^13),3)
-G3_upr <- round(p2_upr^13*(1-p2_upr)/(1-p2_upr^13),3)
+G3 <- round(s2^13*(1-s2)/(1-s2^13),3) 
+G3_lwr <- round(s2_lwr^13*(1-s2_lwr)/(1-s2_lwr^13),3)
+G3_upr <- round(s2_upr^13*(1-s2_upr)/(1-s2_upr^13),3)
 # annual survival for adult stage, phi (8 + years old)
 P3 <- 0.979 
 P3_lwr <- 0.927
 P3_upr <- 0.992
+# mean annual number of female eggs produced (Gibbs et al. 2014) 
+F1 <- 7*propfem*P3
+F1_lwr <- 4*propfem*P3_lwr
+F1_upr <- 10*propfem*P3_upr
 
 # make matrices
 stages <- c("egg/hatchling", "young juvenile", "juvenile/subadult", "adult")
@@ -1502,7 +1508,7 @@ Now let's run the deterministic projection to extract stable stage proportions a
 
 We will project the Santa Fe population from 2020 to 2100.
 
-```{r}
+```{r deterministic-projection}
 set.seed(123)
 
 it <- 81 # time steps for model
@@ -1547,7 +1553,7 @@ Without any other constraints on the tortoise population, these vital rates shou
 
 Now let's create our stochastic model.
 
-```{r}
+```{r stochastic-projection-final-pop}
 # stochastic projection (with density dependence)
 tortoise.matrices <- list(tortoise.matrix, tortoise.matrix.lwr, 
                           tortoise.matrix.upr)
@@ -1570,7 +1576,7 @@ Almost all of our stochastic projections end with a female adult population > 10
 
 Let's run the stochastic projection again, but this time we'll put the projections in a for loop that will let us get population size estimates at each time step so we can plot out the projected female population from 2020 to 2100.
 
-```{r}
+```{r, stochastic-projection-trends}
 extin=c()
 popQuant = matrix(NA, 3, 82)
 popQuant[,1] = rep(sum(n_2020), 3)
@@ -1621,10 +1627,7 @@ stoch.pop.plot <- ggplot(stoch.proj.df, aes(Year, N_projected)) +
 
 stoch.pop.plot
 
-# save plot
-ggsave("images/pop_projection_tortoises.jpg", device = "jpeg",
-       width = 6, height = 4, units = "in", dpi = 600)
-
+# quasiextinction probs
 plot(extin/interactionX, type='l', lwd=2, xlab="Years into the future", 
      main="Extinction probability for Santa Fe population")
 
@@ -1645,7 +1648,7 @@ These projections obviously do not take into account environmental stochasticity
 
 Let's attach this projection figure to our other survival and abundance figures.
 
-```{r, fig.height = 6, fig.width = 10}
+```{r, population-parameter-plot, fig.height = 6, fig.width = 10}
 library(cowplot)
 ggdraw() +
   draw_plot(santafe.phi.plot, x = 0, y = 0.5, width = 0.5, height = 0.5) +
@@ -1654,10 +1657,6 @@ ggdraw() +
   draw_plot(stoch.pop.plot, x = 0.5, y = 0, width = 0.5, height = 0.5) +
   draw_plot_label(label = c("a", "b", "c", "d"), size = 15,
                   x = c(0.08, 0.58, 0.08, 0.58), y = c(1, 1, 0.5, 0.5))
-
-# save plot
-ggsave("images/phi_p_N_estimates.jpg", device = "jpeg",
-       width = 6, height = 4, units = "in", dpi = 600)
 ```
 
 # Dispersal
@@ -1738,7 +1737,7 @@ Here is the code to make dispersal maps for specific occasions and cohorts. I'll
 
 First let's look at the general distribution, showing tortoise locations at each occasion with overlayed 95% confidence ellipses.
 
-```{r, code-for-dispersal-scatterplot-and-ellipse-maps-of-2015 cohort, fig.height=10, fig.width=12}
+```{r, dispersal-scatterplots-first-cohort, fig.height=10, fig.width=12}
 library(ggsn)
 disp.scatter <- function(data, occasion, cohort){
   ggplot(data = data[data$occ == occasion & data$Cohort == cohort,], 
@@ -1809,16 +1808,13 @@ plot_grid(p1, p2, p3, p4,
           ncol  = 2, 
           labels = c("1 year", "2 years", "3 years", "4 years"), 
           label_size = 20)
-
-ggsave("images/dispersal_C1_map.jpg", device = "jpeg",
-       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 The first cohort is slowly spreading over the center of the island and seems to be doubling in area almost every year since release.
 
 Let's see what these movements look like for the 2015 cohort when you connect the observations of individual tortoises over time as traces.
 
-```{r, plot-traces-of-2015-cohort, fig.cap = "Individual tortoise dispersal routes from first release cohort on Santa Fe island (2015-2020)"}
+```{r, traces-first-cohort, fig.cap = "Individual tortoise dispersal routes from first release cohort on Santa Fe island (2015-2020)"}
 traces1 <- ggplot() +
   geom_polygon(data = santafe, 
                aes(x = santafe$X, y = santafe$Y), fill = "grey") +
@@ -1838,7 +1834,7 @@ traces1
 
 Let's now look at all the traces of all cohorts together.
 
-```{r, plot-traces-of-2017-cohort, fig.cap = "Individual tortoise dispersal routes on Santa Fe island (2015-2020)"}
+```{r, traces-all-cohorts, fig.cap = "Individual tortoise dispersal routes on Santa Fe island (2015-2020)"}
 all.traces <-
   ggplot(data = movements.data,
                   aes(x = X_corrected, y = Y_corrected)) +
@@ -1857,11 +1853,11 @@ all.traces
 ```
 
 
-Interesting how tortoise movement has not been one directional. Many tortoises make large outward movements after release, only to return close to the center of the island on another occasion. These are only snapshops, so we really can't say much about tortoise movement or dispersal from these traces, other than that tortoises seem to be exploratory in these initial post-release movements.
+Interesting how tortoise movement has not been one directional. Many tortoises make large outward movements after release, only to return close to the center of the island on another occasion. These are only snapshots, so we really can't say much about tortoise movement or dispersal from these traces, other than that some tortoises seem to be exploratory in these initial post-release movements.
 
 Finally, let's look at dispersal ellipses for the whole tortoise population from the last survey occasion in 2020. 
 
-```{r, fig.cap = "Distribution of tortoise cohorts on Santa Fe, as of March 2020."}
+```{r, final-distribution-scatterplot-with-cohort-ellipses, fig.cap = "Distribution of tortoise cohorts on Santa Fe, as of March 2020."}
 p.final.cohorts <-   
   ggplot(data = movements.data[movements.data$occ == "March 2020" & 
                                    !is.na(movements.data$Cohort),], 
@@ -1927,15 +1923,13 @@ p.final.cohorts1 <-
   theme(plot.margin = unit(c(0,0,0,0), "mm"))
 
 p.final.cohorts1
-ggsave("images/distribution_cohorts_2020.jpg", device = "jpeg",
-       width = 6, height = 5, units = "in", dpi = 600)
 ```
 
 These final distributions seem to reinforce the "doubling" seen in the first cohort's dispersal distances over time. The first cohort is distributed over an area roughly twice the size of the second cohort, which is also roughly twice as widespread as the third cohort.
 
 What about the ellipse for the whole population in 2020?
 
-```{r}
+```{r, final-distribution-scatterplot-total-ellipse}
 p.final <- 
   ggplot(data = movements.data[movements.data$occ == "March 2020",], 
          aes(x = X_corrected, y = Y_corrected)) +
@@ -1958,8 +1952,6 @@ p.final + annotate("text", x = 0, y = 1800,
                                  round(stat.ellipse.area(p.final)/2473*100, 1), 
                                  "%)", 
                                  sep = ""), size = 5)
-ggsave("images/distribution_total_2020.jpg", device = "jpeg",
-       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 Let's now examine how tortoise distributions vary over time with kernel density maps.
@@ -1983,7 +1975,9 @@ tortoises.santafe$marks <- tortoises.santafe$marks %>%
 
 Here I calculate kernel density of tortoises on Santa Fe, at six time events (August 2015, June 2016, June 2017, June 2018, August 2019, and March 2020). These maps are kind of like heat maps: brighter colors/higher values indicate greater tortoise densities. 
 
-```{r, fig.height=5, fig.width=10}
+Because detection is imperfect, density estimates will be imperfect based on the raw capture locations. So I'll multiply the resulting density rasters by the time-specific detection value obtained by our top CJS model for each survey occasion.
+
+```{r, kernel-density-trends-total-pop, fig.height=5, fig.width=10}
 # kernel density function
 den.fun <- function(ppp, res){
   den.list <- list()
@@ -2077,13 +2071,11 @@ total.density.plots <-
   layer(sp.points(release.pt, pch = 4, cex=1, col="red", alpha = 0.7))
 
 total.density.plots
-ggsave("images/kernel_density_2015_2020.jpg", device = "jpeg",
-       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 In this next composite figure I'm only showing densities for the first release cohort. 
 
-```{r, fig.height=5, fig.width=10}
+```{r, kernel-density-trends-first-cohort, fig.height=5, fig.width=10}
 den.list <- den.fun(ppp = subset(tortoises.santafe, Cohort == "2015"))
 tortoise.brick.2015 <- brick(den.list$raster)
 # replace negative values with 0
@@ -2095,22 +2087,20 @@ for(i in c(1:6)){
 }
 names(tortoise.brick.2015) <- c("Y2015", "Y2016", "Y2017", 
                                 "Y2018", "Y2019", "Y2020")
+
 levelplot(tortoise.brick.2015, par.settings = viridisTheme, 
           scales = list(cex = 1.5),
           colorkey = list(labels = list(cex = 1.5)),
           par.strip.text = list(cex = 1.5), layout = c(3,2),
           main = list("Dispersal of first release cohort", cex = 1.5)) +
   layer(sp.points(release.pt, pch = 4, cex=1, col="red", alpha = 0.7))
-
-ggsave("images/kernel_density_2015_2020_C1.jpg", device = "jpeg",
-       width = 10, height = 5, units = "in", dpi = 600)
 ```
 
 At four and a half years since release, the first release cohort is widely dispersed across several spatial clusters.
 
 Let's now quantify dispersal over time. In this next chunk of code and following figure I look at the kernel density estimates from dispersal distances (Euclidean distance from release point), highlighting the distances of the 50% isopleth with black lines, 95% isopleth with blue lines, and max distances with red lines for each occasion.
 
-```{r}
+```{r, calculate-dispersal-rates-over-time}
 movements.data$dist <- sqrt((movements.data$X - 827253)^2 +
                               (movements.data$Y - 9909160)^2)
 movements.data$dist[movements.data$Days_ellapsed == 0] <- 0
@@ -2207,7 +2197,7 @@ p20 <- den.plot(data = movements.data, cohort = c("2015", "2017", "2019"),
                                                 x=NULL, y = NULL)
 ```
 
-```{r, fig.height = 10, fig.width = 12}
+```{r, dispersal-rates-first-cohort, fig.height = 10, fig.width = 12}
 # 2015 cohort dispersal plot
 dispersal_15cohort <- ggarrange(p15_c15, p16_c15, p17_c15, 
                                 p18_c15, p19_c15, p20_c15,
@@ -2221,7 +2211,7 @@ annotate_figure(dispersal_15cohort,
                                    color = "black", size = 18))
 ```
 
-```{r, fig.height = 8, fig.width = 10}
+```{r, dispersal-rates-second-cohort, fig.height = 8, fig.width = 10}
 # 2017 cohort dispersal plot
 dispersal_17cohort <- ggarrange(p17_c17, p18_c17, p19_c17, p20_c17, 
                                 ncol = 1, nrow = 4)
@@ -2235,7 +2225,7 @@ annotate_figure(dispersal_17cohort,
                                    color = "black", size = 18))
 ```
 
-```{r, fig.height = 10, fig.width = 12}
+```{r, total-dispersal-rates, fig.height = 10, fig.width = 12}
 # Total disperal plot
 dispersal_total <- ggarrange(p15, p16, p17, p18, p19, p20, ncol = 1, nrow = 6)
 
@@ -2250,7 +2240,7 @@ annotate_figure(dispersal_total,
 
 Let's make this previous visualization another way using ridgeplots. I'll align these dispersal surfaces with the population size on Santa Fe.
 
-```{r, fig.height = 5, fig.width = 9.5}
+```{r, dispersal-ridges-with-N, fig.height = 5, fig.width = 9.5}
 library(ggridges)
 library(purrr)
 # cumulative N plot
@@ -2293,7 +2283,7 @@ ggarrange(N.plot, disp.plot, widths = c(1, 4), ncol = 2)
 
 Let's directly contrast the initial (+2 months, +1 year, +2 years) dispersal distances between the first two release cohorts. Here I'll show the 95% isopleth with dashed lines and the max distance with solid lines.
 
-```{r, fig.height = 5, fig.width = 8}
+```{r, initial-dispersal-rates-first-two-cohorts, fig.height = 5, fig.width = 8}
 init.disp.contrast <- 
   movements.data[c(movements.data$Cohort == "2015" & 
                      movements.data$occ == "August 2015") |
@@ -2370,7 +2360,7 @@ A few takeaways:
 
 (1) Tortoises from all three cohorts seem to rapidly disperse within the first two months after release, and become a bit more fixed thereafter. The second cohort seems to disperse a bit more widely than the first in that initial period. This could be evidence of a density-dependent dispersal process.
 
-(2) The first cohort seemed to become spatially fixed two years post-release. This could be a natural dispersal plateau for the population on this island or be due to a sampling bias that missed individuals that were outside of the sampling zone.
+(2) The first cohort seemed to become spatially fixed two years post-release. This could be a natural dispersal plateau for the population on this island or be due to a sampling bias that missed individuals that were outside of the sampling zone. I'd have to compare those distance values with uncertainty to say more.
 
 ## Spatial patterns - telemetry data
 
@@ -2409,7 +2399,7 @@ telemetry.data <- as.data.frame(telemetry.shp)
 
 Now let's look at those traces, both in aggregate and color-coded by individual.
 
-```{r, plot-traces-of-radiotelemetry-data-from-2015-cohort}
+```{r, telemetry-traces-2015-cohort}
 traces.tele <- ggplot() +
   geom_polygon(data = santafe, aes(x = santafe$X, y = santafe$Y), 
                fill = "grey") +
@@ -2429,7 +2419,7 @@ traces.tele
 
 Let's also look at the same figure but zoomed in and with different colors for each individual.
 
-```{r, plot-zoomed-in-traces-of-radiotelemetry-data-from-2015-cohort}
+```{r, telemetry-traces-2015-cohort-zoomed}
 traces.tele.ind <- ggplot() +
   geom_polygon(data = santafe, 
                aes(x = santafe$X, y = santafe$Y), fill = "grey") +
@@ -2451,26 +2441,35 @@ traces.tele.ind
 
 ## Summary
 
-```{r, echo = FALSE, fig.height = 9, fig.width = 11}
+Let's create one figure that pulls together all of these major movement results: tortoise distributions over time, ellapsed traces, and dispersal ellipses and kernel densities from 2020.
+
+```{r, composite-dispersal-kernel-density-figure, echo = FALSE, fig.height = 9, fig.width = 11}
+# pull the abundance and distribution by time plots together into a top panel
+top <- ggarrange(N.plot + ggtitle("a") + theme(title = element_text(size = 8)), 
+                 disp.plot + ggtitle("b") + theme(title = element_text(size = 8)), 
+                 widths = c(1, 4), ncol = 2)
+
+# traces plot with cohort ellipse overlay
 traces.ms <- 
   ggplot(data = movements.data, aes(x = X_corrected, y = Y_corrected)) +
-  geom_polygon(data = santafe, 
-               aes(x = santafe$X, y = santafe$Y), fill = "grey") +
+  geom_polygon(data = santafe, aes(x = santafe$X, y = santafe$Y), fill = "grey") +
   geom_path(aes(group = PIT_final), alpha = 0.2, lwd = 0.6) +
   geom_point(aes(x = 0, y = 0), 
              shape = 4, size = 2, stroke = 1.5, color = "red") +
+  stat_ellipse(data = movements.data[movements.data$occ == "March 2020" & 
+                                   !is.na(movements.data$Cohort),],
+               aes(x = X_corrected, y = Y_corrected, color = Cohort), 
+               level = 0.95, lwd = 0.9, alpha = 0.5) +
   theme_bw() + mythemes + coord_equal() +
-  theme(plot.margin = unit(c(0,5,0,0), "mm"), title = element_text(size = 5)) +
+  theme(plot.margin = unit(c(0,5,0,0), "mm"), legend.position = "bottom") +
   scale_x_continuous(limits = c(-3600, 3700)) +
   scale_y_continuous(limits = c(-2300, 2500)) +
+  guides(color = guide_legend(override.aes= list(alpha = 1))) +
+  scale_color_manual(values = c("#E69F00", "#56B4E9", "#009E73")) +
   labs(x = "Distance from release (m)", 
-       y = "Distance from release (m)", title = "c") 
-  
+       y = "Distance from release (m)", title = "c")
 
-top <- ggarrange(N.plot + ggtitle("a") + theme(title = element_text(size = 6)), 
-                 disp.plot + ggtitle("b") + theme(title = element_text(size = 6)), 
-                 widths = c(1, 4), ncol = 2)
-
+# 2020 kernel density plot
 den2020pts <- rasterToPoints(tortoise.brick.adj$Y2020, spatial = TRUE)
 den2020df  <- data.frame(den2020pts)
 den2020df$X_corrected <- den2020df$x - 827253
@@ -2481,27 +2480,27 @@ den2020 <- ggplot() +
   geom_raster(data = den2020df , 
               aes(x = X_corrected, y = Y_corrected, fill = Y2020)) +
   geom_point(inherit.aes = FALSE, aes(x = 0, y = 0), 
-             shape = 4, size = 2, stroke = 1.5, color = "red", alpha = 0.5) +
-  theme_bw() + mythemes + coord_equal() + theme(legend.position = "right") +
+             shape = 4, size = 2, stroke = 1.5, color = "red", alpha = 0.7) +
+  theme_bw() + mythemes + coord_equal() + 
   theme(plot.margin = unit(c(0,0,0,0), "mm")) +
   scale_x_continuous(limits = c(-3600, 3700)) +
   scale_y_continuous(limits = c(-2300, 2500)) +
   labs(x = "Distance from release (m)", y = NULL, title = "d",
        fill = "Density (per ha)") + 
   scale_fill_scico(palette = 'batlow') +
-  theme(legend.key.width=unit(1,"cm"), axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(), title = element_text(size = 5))
+  theme(legend.position = "bottom", legend.key.width=unit(1,"cm"), 
+        axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
+        title = element_text(size = 5)) +
+  guides(fill = guide_colorbar(title.vjust=0.8))
 
-bottom <- plot_grid(traces.ms + ggtitle("c") + theme(title = element_text(size = 6)),
-                    den2020 + ggtitle("d") + theme(title = element_text(size = 6)), 
+# bring the trace plot and kernel density plot together into a bottom panel
+bottom <- plot_grid(traces.ms + ggtitle("c") + theme(title = element_text(size = 8)),
+                    den2020 + ggtitle("d") + theme(title = element_text(size = 8)), 
                     ncol = 2, axis = "tblr", 
-                    rel_widths = c(1, 1.14), align = "h")
+                    rel_widths = c(1, 1), align = "h")
 
-jpeg("images/dispersal_plots.jpg", width = 11, height = 9, units = "in", res = 600)
-
+library(gridExtra)
 grid.arrange(top, bottom, nrow = 2)
-
-dev.off()
 ```
 
 Let's make one final summary table of our dispersal statistics.
@@ -2552,7 +2551,7 @@ write.csv(disp.table, "data/tortoise_dispersal_summary.csv")
 
 Let's examine our Santa Fe land iguana data from 2011 to 2020 to see whether the population has been affected by the tortoise introduction so far. 
 
-```{r, echo = FALSE, out.width = "35%", out.height = "35%", fig.align = "center", fig.cap = "A male Santa Fe land iguana (*Conolophus pallidus*)."}
+```{r, iguana, echo = FALSE, out.width = "35%", out.height = "35%", fig.align = "center", fig.cap = "A male Santa Fe land iguana (*Conolophus pallidus*)."}
 
 include_graphics("images/iguana.jpg")
 ```
@@ -2563,1678 +2562,14 @@ I'll do this using two corroborative data sets:
 
   (2) plot counts from 2011 and 2020
 
-## Distance sampling data
+## Iguana trends (transects)
 
-### Original 2011 full-island survey
-
-Let's first analyze our iguana population data from the full-island survey of transects conducted in 2011.
-
-First we'll load the iguana and covariate data and prepare it for the distance sampling models in `unmarked`.
-
-```{r, load-packages-and-iguana-data}
-# load packages 
-library(unmarked) 
-
-# load iguana data 
-iguanas2011 <- read.csv("data/iguanas_distsamp_2011.csv")
-
-# subset by sex
-males2011 <- iguanas2011[iguanas2011$TYPE == "ITM",]
-females2011 <- iguanas2011[iguanas2011$TYPE == "ITH",]
-juveniles2011 <- iguanas2011[iguanas2011$TYPE == "ITJ",]
-total2011 <- rbind(males2011, females2011, juveniles2011)
-
-# prepare for unmarked
-## male observations
-dists_machos <- 
-  data.frame(distance = as.numeric(as.character(males2011$DISTANCE)),  
-             transect = as.factor(males2011$TRANSECT))
-# add in other transects without observations
-levels(dists_machos$transect) <- c(levels(dists_machos$transect),
-                                   unique(iguanas2011$TRANSECT[
-                                     iguanas2011$TRANSECT %notin%
-                                     as.character(dists_machos$transect)]))
-## female observations
-dists_hembras <- 
-  data.frame(distance = as.numeric(as.character(females2011$DISTANCE)),  
-             transect = as.factor(females2011$TRANSECT))
-# add in other transects without observations
-levels(dists_hembras$transect) <- c(levels(dists_hembras$transect),
-                                   unique(iguanas2011$TRANSECT[
-                                     iguanas2011$TRANSECT %notin%
-                                     as.character(dists_hembras$transect)]))
-## juvenile observations
-dists_juvs <- 
-  data.frame(distance = as.numeric(as.character(juveniles2011$DISTANCE)), 
-             transect = as.factor(juveniles2011$TRANSECT))
-# add in other transects without observations
-levels(dists_juvs$transect) <- c(levels(dists_juvs$transect),
-                                   unique(iguanas2011$TRANSECT[
-                                     iguanas2011$TRANSECT %notin%
-                                     as.character(dists_juvs$transect)]))
-
-## total observations
-dists_all <- 
-  data.frame(distance = as.numeric(as.character(total2011$DISTANCE)), 
-             transect = as.factor(total2011$TRANSECT))
-# add in other transects without observations
-levels(dists_all$transect) <- c(levels(dists_all$transect),
-                                   unique(iguanas2011$TRANSECT[
-                                     iguanas2011$TRANSECT %notin%
-                                     as.character(dists_all$transect)]))
-
-# load transect covariate data
-covs <- read.csv(file = "data/distsamp_covars.csv", 
-                 header = TRUE, row.names="transect") %>%
-  mutate(transect = rownames(.)) %>%
-  as.data.frame()
-```
-
-Our iguana data were originally recorded at the individual-level with continuous exact distances, but `distsamp()` requires the data at the transect-level with observations binned by the distance intervals. So we'll do that for each group here, truncating the data for each at the 0.975 quantile distance for each population to remove outliers (Buckland et al. 2001).
-
-```{r, format-distance-sampling-data}
-# pool males and females to find common quantile distance for all adults
-dists_adults <- rbind(dists_machos, dists_hembras)
-dists_adults$quantile <- q.rank(dists_adults$distance)
-max.dist.adults <- min(dists_adults$distance[dists_adults$quantile >= 0.975], 
-                       na.rm = T)
-# all adults
-dists_adults %>% arrange(transect) -> dists_adults
-yDat_adults <- formatDistData(dists_adults, distCol="distance",
-                              transectNameCol="transect",
-                              dist.breaks=seq(0, max.dist.adults, length.out = 5))
-# reorder data frame by transect order in covariate df for later integration
-yDat_adults <- yDat_adults[match(covs$transect, rownames(yDat_adults)),]
-
-# males
-yDat_machos <- formatDistData(dists_machos, distCol="distance",
-                              transectNameCol="transect",
-                              dist.breaks=seq(0, max.dist.adults, length.out = 5))
-yDat_machos <- yDat_machos[match(covs$transect, rownames(yDat_machos)),]
-
-# females
-yDat_hembras <- formatDistData(dists_hembras, distCol="distance",
-                              transectNameCol="transect",
-                              dist.breaks=seq(0, max.dist.adults, 
-                                              length.out = 5))
-yDat_hembras <- yDat_hembras[match(covs$transect, rownames(yDat_hembras)),]
-
-# juveniles (no truncation because of the small sample)
-yDat_juvs <- formatDistData(dists_juvs, distCol="distance",
-                            transectNameCol="transect", 
-                            dist.breaks=seq(0,9,length.out = 5))
-yDat_juvs <- yDat_juvs[match(covs$transect, rownames(yDat_juvs)),]
-
-# total
-dists_all$quantile <- q.rank(dists_all$distance)
-max.dist.all <- min(dists_all$distance[dists_all$quantile >= 0.975], na.rm = T)
-yDat_all <- formatDistData(dists_all, distCol="distance",
-                           transectNameCol="transect",
-                           dist.breaks=seq(0, max.dist.all, length.out = 5))
-yDat_all <- yDat_all[match(covs$transect, rownames(yDat_all)),]
-```
-
-Before moving on, we should check for colinearity among our covariates. Note: our covariates were linked to each transect in GIS by extending a 50m buffer around each transect (with flat ends) and calculating mean elevation, slope, and dominant vegetation type and aspect. 
-
-Let's look at the variance inflation factors (VIFs) to see if there is any colinearity.
-
-```{r, check-colinearity-with-VIFs}
-# get VIFs
-corvif(covs[,1:4]) # no colinearity
-```
-
-There doesn't seem to be any colinearity we need to worry about here.
-
-Now let's create unmarked distance sampling frames -- `unmarkedFrameDS()` -- for each iguana category, pulling together the distance observations and spatial covariates and specifying the metadata for the sampling (i.e., transect length, measurement units, etc.) to make population estimates. We use these `unmarkedFrame` objects to run our models.
-
-```{r, make-2011-umf}
-###################################### ADULTS ##################################
-umf_adults <- unmarkedFrameDS(y=as.matrix(yDat_adults), 
-                              siteCovs=data.frame(elev = covs$elev,
-                                                  slope = covs$slope,
-                                                  aspect = covs$aspect,
-                                                  veg = covs$veg), 
-                              survey="line", 
-                              dist.breaks=seq(0,max.dist.adults,length.out = 5), 
-                              tlength=rep(500, 311), unitsIn="m")
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_adults)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_adults) <- sc.s
-# summary of male data
-summary(umf_adults)
-hist(umf_adults, xlab="distance (m)", main="Distribution of Adult Distances", 
-     cex.lab=0.8, cex.axis=0.8)
-
-###################################### MALES ###################################
-# males
-umf_machos <- unmarkedFrameDS(y=as.matrix(yDat_machos), 
-                              siteCovs=data.frame(elev = covs$elev,
-                                                  slope = covs$slope,
-                                                  aspect = covs$aspect,
-                                                  veg = covs$veg), 
-                              survey="line", 
-                              dist.breaks=seq(0,max.dist.adults,length.out = 5), 
-                              tlength=rep(500, 311), unitsIn="m")
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_machos)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_machos) <- sc.s
-
-###################################### FEMALES #################################
-# females
-umf_hembras <- unmarkedFrameDS(y=as.matrix(yDat_hembras), 
-                              siteCovs=data.frame(elev = covs$elev,
-                                                  slope = covs$slope,
-                                                  aspect = covs$aspect,
-                                                  veg = covs$veg), 
-                              survey="line", 
-                              dist.breaks=seq(0,max.dist.adults,length.out = 5), 
-                              tlength=rep(500, 311), unitsIn="m")
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_hembras)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_hembras) <- sc.s
-
-###################################### JUVENILES ###############################
-# juveniles
-umf_juvs <- unmarkedFrameDS(y=as.matrix(yDat_juvs), 
-                            siteCovs=data.frame(elev = covs$elev,
-                                                slope = covs$slope,
-                                                aspect = covs$aspect,
-                                                veg = covs$veg), 
-                            survey="line", 
-                            dist.breaks=seq(0,9,length.out = 5), 
-                            tlength=rep(500, 311), unitsIn="m")
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_juvs)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_juvs) <- sc.s
-# summary of juvenile data
-summary(umf_juvs)
-hist(umf_juvs, xlab="distance (m)", main="Distribution of Juvenile Distances", 
-     cex.lab=0.8, cex.axis=0.8)
-
-###################################### TOTAL ###################################
-# total
-umf_all <- unmarkedFrameDS(y=as.matrix(yDat_all), 
-                           siteCovs=data.frame(elev = covs$elev,
-                                               slope = covs$slope,
-                                               aspect = covs$aspect,
-                                               veg = covs$veg), 
-                           survey="line", 
-                           dist.breaks = seq(0,max.dist.all,length.out = 5), 
-                           tlength=rep(500, 311), unitsIn="m")
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_all)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_all) <- sc.s
-# summary of female data
-summary(umf_all)
-hist(umf_all, xlab="distance (m)", main="Distribution of Iguana Distances", 
-     cex.lab=0.8, cex.axis=0.8)
-```
-\ 
-\ 
-
-#### **Total iguanas**
-***
-Let's first build models for the full iguana population. We'll identify the most suitable detection function for all iguanas and use that going forward for model selection.
-
-```{r, total-iguanas-compare-detection-functions}
-all.hazard <- distsamp(
-  ~veg 
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_all, keyfun="hazard", output="density", unitsOut="ha", rel.tol=0.001)
-
-all.halfnorm <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_all, keyfun="halfnorm", output="density", unitsOut="ha", rel.tol=0.001)
-
-all.negexp <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_all, keyfun="exp", output="density", unitsOut="ha", rel.tol=0.001)
-
-library(AICcmodavg)
-aictab(cand.set = list(all.hazard, all.halfnorm, all.negexp),
-     modnames = c("hazard", "halfnorm", "negative exponential"))
-```
-
-The hazard function appears to be the best for our iguana data.
-
-Let's now run a goodness of fit test on the global iguana model to decide whether our model structure is appropriate or if we need to account for overdispersion.
-
-```{r, GoF-total-iguanas, cache = TRUE}
-fitstats <- function(fm) {
-    observed <- getY(fm@data)
-    expected <- fitted(fm)
-    resids <- residuals(fm)
-    sse <- sum(resids^2)
-    chisq <- sum((observed - expected)^2 / expected, na.rm = TRUE)
-    freeTuke <- sum((sqrt(observed) - sqrt(expected))^2, na.rm = TRUE)
-    out <- c(SSE=sse, Chisq=chisq, freemanTukey=freeTuke)
-    return(out)
-}
-
-set.seed(1)
-GoF.all <- parboot(all.hazard, fitstats, nsim=1000, report=5)
-GoF.all
-par(mfrow = c(3,1))
-plot(GoF.all)
-
-c.hat.all <- GoF.all@t0[2] / mean(GoF.all@t.star[,2]); c.hat.all
-```
-
-Our global model has some issues with goodness of fit. The c-hat value is acceptable, but the model performs poorly on all three goodness of fit tests. Let's see if using a negative binomial distribution improves the model fit with `gdistsamp`.
-
-In this case, we won't fit anything for **phi** (just the intercept), which is the availability parameter.
-
-```{r, total-GoF-take-two-with-negbin, cache = TRUE}
-umf_all_g <- unmarkedFrameGDS(y=as.matrix(yDat_all), 
-                              siteCovs=data.frame(elev = covs$elev,
-                                                  slope = covs$slope,
-                                                  aspect = covs$aspect,
-                                                  veg = covs$veg), 
-                              survey="line", 
-                              dist.breaks=seq(0,max.dist.all,length.out = 5), 
-                              tlength=rep(500, 311), unitsIn="m", numPrimary = 1)
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_all_g)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_all_g) <- sc.s
-
-all.hazard.nb <- gdistsamp(
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  ~1, 
-  ~veg,
-  mixture = "NB",
-  umf_all_g, keyfun="hazard", output="density", unitsOut="ha", rel.tol=0.001)
-
-set.seed(1)
-GoF.all.nb <- parboot(all.hazard.nb, fitstats, nsim=1000, report=5)
-GoF.all.nb
-par(mfrow = c(3,1))
-plot(GoF.all.nb)
-
-c.hat.all.nb <- GoF.all.nb@t0[2] / mean(GoF.all.nb@t.star[,2]); c.hat.all.nb
-```
-
-The negative binomial abundance model yields a much better model fit, so let's stick with this for all our iguana model groups.
-
-We will use the following candidate model list for all iguana groups.
-
-```{r, make-and-compare-models-for-total-iguanas}
-all <- list() # make a list to store macho models
-all$null <- gdistsamp(lambdaformula = ~1,
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_all_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-all$elev <- gdistsamp(lambdaformula = ~elev, 
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_all_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-all$elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_all_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-all$slope <- gdistsamp(lambdaformula = ~slope,  
-                          phiformula = ~1, 
-                          pformula = ~1,
-                          umf_all_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-all$aspect <- gdistsamp(lambdaformula = ~aspect, 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_all_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-all$veg <- gdistsamp(lambdaformula = ~veg, 
-                        phiformula = ~1, 
-                        pformula = ~1, 
-                        umf_all_g, mixture = "NB",
-                        keyfun="hazard", output="density", unitsOut="ha")
-
-all$topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_all_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-all$topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_all_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-all$subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                              phiformula = ~1, 
-                              pformula = ~1, 
-                              umf_all_g, mixture = "NB",
-                              keyfun="hazard", output="density", unitsOut="ha")
-
-all$global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_all_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.null <- gdistsamp(lambdaformula = ~1, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_all_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.elev <- gdistsamp(lambdaformula = ~elev, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_all_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_all_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.slope <- gdistsamp(lambdaformula = ~slope, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_all_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.aspect <- gdistsamp(lambdaformula = ~aspect, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_all_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.veg <- gdistsamp(lambdaformula = ~veg, 
-                          phiformula = ~1, 
-                          pformula = ~veg, 
-                          umf_all_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_all_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_all_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                                phiformula = ~1, 
-                                pformula = ~veg, 
-                                umf_all_g, mixture = "NB",
-                                keyfun="hazard", output="density", unitsOut="ha")
-
-all$p.global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_all_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-# Making a QAIC table - list of all models for ranking
-library(AICcmodavg)
-# make custom model names showing the variables
-modnames <- c("lambda(.) p(.)", 
-              "lambda(elev) p(.)", 
-              "lambda(elev + elev^2^) p(.)",
-              "lambda(slope) p(.)", 
-              "lambda(aspect) p(.)",
-              "lambda(veg) p(.)", 
-              "lambda(elev + slope + aspect) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect) p(.)",
-              "lambda(elev + slope + aspect + veg) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(.)", 
-              "lambda(.) p(veg)", 
-              "lambda(elev) p(veg)", 
-              "lambda(elev + elev^2^) p(veg)",
-              "lambda(slope) p(veg)", 
-              "lambda(aspect) p(veg)", 
-              "lambda(veg) p(veg)", 
-              "lambda(elev + slope + aspect) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect) p(veg)",
-              "lambda(elev + slope + aspect + veg) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(veg)")
-
-# Rank by QAIC and print 
-all.rankings <- as.data.frame(aictab(cand.set = all, 
-                                        modnames = modnames,
-                                        c.hat = c.hat.all.nb, second.ord = FALSE, 
-                                        sort = TRUE))
-
-all.rankings$Deviance <- round(-2*all.rankings$Quasi.LL,2) # get deviances
-all.rankings <- all.rankings[,c(1,2,4,6,9,10)]
-colnames(all.rankings) <- c("Model", "K", "Delta_QAIC", 
-                               "QAIC_wt.", "Cum. weight", "Deviance")
-
-kable(all.rankings, "html", row.names = FALSE, 
-      caption = "Poisson abundance model rankings for total iguanas", 
-      digits = 3) %>% 
-  kable_styling(bootstrap_options = c("striped", "condensed")) %>%
-  scroll_box(height = "350px")
-
-write.csv(all.rankings, "data/iguana_all_QAIC.csv")
-```
-
-It seems like aspect is overwhelmingly driving iguana distributions, with more iguanas in areas with north and west-facing slopes. There is still some model uncertainty, with several other models within 6 QAIC units and a cumulative weight of 0.95. 
-
-Let's follow the same approach for all our iguana subgroups. I don't show all the code for these sections, as they will be virtually the same as what was presented above.
-
-Male and female adult iguanas should display the same detection function, so let's examine goodness of fit on a pooled adult dataset rather than each sex individually.
-
-```{r, adult-iguanas-compare-detection-functions}
-adults.hazard <- distsamp(
-  ~veg 
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_adults, keyfun="hazard", output="density", unitsOut="ha", rel.tol=0.0001)
-
-adults.halfnorm <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_adults, keyfun="halfnorm", output="density", unitsOut="ha", rel.tol=0.0001)
-
-adults.negexp <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_adults, keyfun="exp", output="density", unitsOut="ha", rel.tol=0.0001)
-
-aictab(cand.set = list(adults.hazard, adults.halfnorm, adults.negexp),
-     modnames = c("hazard", "halfnorm", "negative exponential"))
-```
-
-The hazard function again is what we probably want. Let's examine goodness of fit.
-
-```{r, GoF-adults, cache = TRUE}
-set.seed(12)
-GoF.adults <- parboot(adults.hazard, fitstats, nsim=1000, report=5)
-GoF.adults
-par(mfrow = c(3,1))
-plot(GoF.adults)
-
-c.hat.adults <- GoF.adults@t0[2] / mean(GoF.adults@t.star[,2]); c.hat.adults
-```
-
-Let's look at the negative binomial global hazard model fit statistics for adults.
-
-```{r, GoF-adults-nb, cache = TRUE}
-umf_adults_g <- unmarkedFrameGDS(y=as.matrix(yDat_adults), 
-                                 siteCovs=data.frame(elev = covs$elev,
-                                                     slope = covs$slope,
-                                                     aspect = covs$aspect,
-                                                     veg = covs$veg), 
-                                 survey="line", 
-                                 dist.breaks=seq(0, max.dist.adults,
-                                                 length.out = 5), 
-                                 tlength=rep(500, 311), 
-                                 unitsIn="m", 
-                                 numPrimary = 1)
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_adults_g)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_adults_g) <- sc.s
-
-adults.hazard.nb <- gdistsamp(
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  ~1, 
-  ~veg,
-  mixture = "NB",
-  umf_adults_g, keyfun="hazard", output="density", unitsOut="ha", rel.tol=0.001)
-
-set.seed(1)
-GoF.adults.nb <- parboot(adults.hazard.nb, fitstats, nsim=1000, report=5)
-GoF.adults.nb
-par(mfrow = c(3,1))
-plot(GoF.adults.nb)
-
-c.hat.adults.nb <- GoF.adults.nb@t0[2] / mean(GoF.adults.nb@t.star[,2]) 
-c.hat.adults.nb
-```
-
-This model fits the goodness of fit tests, with minimal additional overdispersion. Let's compare models for male and female iguanas using this distribution and c-hat correction.
-\ 
-\ 
-
-#### **Male iguanas**
-***
-
-First we need to create a new `unmarkedFrameGDS` for male iguanas.
-
-```{r}
-umf_machos_g <- unmarkedFrameGDS(y=as.matrix(yDat_machos), 
-                                 siteCovs=data.frame(elev = covs$elev,
-                                                     slope = covs$slope,
-                                                     aspect = covs$aspect,
-                                                     veg = covs$veg), 
-                                 survey="line", 
-                                 dist.breaks=seq(0, max.dist.adults,
-                                                 length.out = 5), 
-                                 tlength=rep(500, 311), 
-                                 unitsIn="m", 
-                                 numPrimary = 1)
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_machos_g)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_machos_g) <- sc.s
-```
-
-Now let's build and rank our candidate model suite for male iguanas.
-
-```{r, make-and-compare-macho-models, echo = FALSE}
-machos <- list() # make a list to store macho models
-machos$null <- gdistsamp(lambdaformula = ~1,
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_machos_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-machos$elev <- gdistsamp(lambdaformula = ~elev, 
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_machos_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-machos$elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_machos_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-machos$slope <- gdistsamp(lambdaformula = ~slope,  
-                          phiformula = ~1, 
-                          pformula = ~1,
-                          umf_machos_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-machos$aspect <- gdistsamp(lambdaformula = ~aspect, 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_machos_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-machos$veg <- gdistsamp(lambdaformula = ~veg, 
-                        phiformula = ~1, 
-                        pformula = ~1, 
-                        umf_machos_g, mixture = "NB",
-                        keyfun="hazard", output="density", unitsOut="ha")
-
-machos$topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_machos_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-machos$topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_machos_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-machos$subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                              phiformula = ~1, 
-                              pformula = ~1, 
-                              umf_machos_g, mixture = "NB",
-                              keyfun="hazard", output="density", unitsOut="ha")
-
-machos$global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_machos_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.null <- gdistsamp(lambdaformula = ~1, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_machos_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.elev <- gdistsamp(lambdaformula = ~elev, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_machos_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_machos_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.slope <- gdistsamp(lambdaformula = ~slope, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_machos_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.aspect <- gdistsamp(lambdaformula = ~aspect, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_machos_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.veg <- gdistsamp(lambdaformula = ~veg, 
-                          phiformula = ~1, 
-                          pformula = ~veg, 
-                          umf_machos_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_machos_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_machos_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                                phiformula = ~1, 
-                                pformula = ~veg, 
-                                umf_machos_g, mixture = "NB",
-                                keyfun="hazard", output="density", unitsOut="ha")
-
-machos$p.global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_machos_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-# Making a QAIC table - list of machos models for ranking
-# make custom model names showing the variables
-modnames <- c("lambda(.) p(.)", 
-              "lambda(elev) p(.)", 
-              "lambda(elev + elev^2^) p(.)",
-              "lambda(slope) p(.)", 
-              "lambda(aspect) p(.)",
-              "lambda(veg) p(.)", 
-              "lambda(elev + slope + aspect) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect) p(.)",
-              "lambda(elev + slope + aspect + veg) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(.)", 
-              "lambda(.) p(veg)", 
-              "lambda(elev) p(veg)", 
-              "lambda(elev + elev^2^) p(veg)",
-              "lambda(slope) p(veg)", 
-              "lambda(aspect) p(veg)", 
-              "lambda(veg) p(veg)", 
-              "lambda(elev + slope + aspect) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect) p(veg)",
-              "lambda(elev + slope + aspect + veg) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(veg)")
-
-# Rank by QAIC and print 
-machos.rankings <- as.data.frame(aictab(cand.set = machos, 
-                                        modnames = modnames,
-                                        c.hat = c.hat.adults.nb, second.ord = FALSE, 
-                                        sort = TRUE))
-
-machos.rankings$Deviance <- round(-2*machos.rankings$Quasi.LL,2) # get deviances
-machos.rankings <- machos.rankings[,c(1,2,4,6,9,10)]
-colnames(machos.rankings) <- c("Model", "K", "Delta_QAIC", 
-                               "QAIC_wt.", "Cum. weight", "Deviance")
-
-kable(machos.rankings, "html", row.names = FALSE, 
-      caption = "Poisson abundance model rankings for male iguanas", 
-      digits = 3) %>% 
-  kable_styling(bootstrap_options = c("striped", "condensed")) %>%
-  scroll_box(height = "350px")
-
-write.csv(machos.rankings, "data/iguana_machos_QAIC.csv")
-```
-
-Similar rankings to the full iguana population. 
-
-```{r}
-machos$p.aspect
-```
-
-Aspect seems to be important and vegetation type affects detection.
-
-\ 
-\ 
-
-#### **Female iguanas**
-***
-
-```{r}
-umf_hembras_g <- unmarkedFrameGDS(y=as.matrix(yDat_hembras), 
-                                 siteCovs=data.frame(elev = covs$elev,
-                                                     slope = covs$slope,
-                                                     aspect = covs$aspect,
-                                                     veg = covs$veg), 
-                                 survey="line", 
-                                 dist.breaks=seq(0, max.dist.adults,
-                                                 length.out = 5), 
-                                 tlength=rep(500, 311), 
-                                 unitsIn="m", 
-                                 numPrimary = 1)
-# scale continuous covariates (elevation, slope)
-sc <- siteCovs(umf_hembras_g)
-sc.s <- cbind(scale(sc[,1:2]), sc[,3:4])
-siteCovs(umf_hembras_g) <- sc.s
-```
-
-```{r, make-and-compare-female-models, echo = FALSE}
-hembras <- list() # make a list to store hembra models
-hembras$null <- gdistsamp(lambdaformula = ~1,
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_hembras_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$elev <- gdistsamp(lambdaformula = ~elev, 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_hembras_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_hembras_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$slope <- gdistsamp(lambdaformula = ~slope,  
-                           phiformula = ~1, 
-                           pformula = ~1,
-                           umf_hembras_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$aspect <- gdistsamp(lambdaformula = ~aspect, 
-                            phiformula = ~1, 
-                            pformula = ~1, 
-                            umf_hembras_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$veg <- gdistsamp(lambdaformula = ~veg, 
-                         phiformula = ~1, 
-                         pformula = ~1, 
-                         umf_hembras_g, mixture = "NB",
-                         keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                          phiformula = ~1, 
-                          pformula = ~1, 
-                          umf_hembras_g, mixture = "NB",
-                          keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                           phiformula = ~1, 
-                           pformula = ~1, 
-                           umf_hembras_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                               phiformula = ~1, 
-                               pformula = ~1, 
-                               umf_hembras_g, mixture = "NB",
-                               keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                            phiformula = ~1, 
-                            pformula = ~1, 
-                            umf_hembras_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.null <- gdistsamp(lambdaformula = ~1, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_hembras_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.elev <- gdistsamp(lambdaformula = ~elev, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_hembras_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.elev2 <- gdistsamp(lambdaformula = ~elev+I(elev^2), 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_hembras_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.slope <- gdistsamp(lambdaformula = ~slope, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_hembras_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.aspect <- gdistsamp(lambdaformula = ~aspect, 
-                              phiformula = ~1, 
-                              pformula = ~veg, 
-                              umf_hembras_g, mixture = "NB",
-                              keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.veg <- gdistsamp(lambdaformula = ~veg, 
-                           phiformula = ~1, 
-                           pformula = ~veg, 
-                           umf_hembras_g, mixture = "NB",
-                           keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.topo <- gdistsamp(lambdaformula = ~elev+slope+aspect, 
-                            phiformula = ~1, 
-                            pformula = ~veg, 
-                            umf_hembras_g, mixture = "NB",
-                            keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.topo2 <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect, 
-                             phiformula = ~1, 
-                             pformula = ~veg, 
-                             umf_hembras_g, mixture = "NB",
-                             keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.subglobal <- gdistsamp(lambdaformula = ~elev+slope+aspect+veg, 
-                                 phiformula = ~1, 
-                                 pformula = ~veg, 
-                                 umf_hembras_g, mixture = "NB",
-                                 keyfun="hazard", output="density", unitsOut="ha")
-
-hembras$p.global <- gdistsamp(lambdaformula = ~elev+I(elev^2)+slope+aspect+veg, 
-                              phiformula = ~1, 
-                              pformula = ~veg, 
-                              umf_hembras_g, mixture = "NB",
-                              keyfun="hazard", output="density", unitsOut="ha")
-
-# Making a QAIC table - list of hembras models for ranking
-# make custom model names showing the variables
-modnames <- c("lambda(.) p(.)", 
-              "lambda(elev) p(.)", 
-              "lambda(elev + elev^2^) p(.)",
-              "lambda(slope) p(.)", 
-              "lambda(aspect) p(.)",
-              "lambda(veg) p(.)", 
-              "lambda(elev + slope + aspect) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect) p(.)",
-              "lambda(elev + slope + aspect + veg) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(.)", 
-              "lambda(.) p(veg)", 
-              "lambda(elev) p(veg)", 
-              "lambda(elev + elev^2^) p(veg)",
-              "lambda(slope) p(veg)", 
-              "lambda(aspect) p(veg)", 
-              "lambda(veg) p(veg)", 
-              "lambda(elev + slope + aspect) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect) p(veg)",
-              "lambda(elev + slope + aspect + veg) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(veg)")
-
-# Rank by QAIC and print 
-hembras.rankings <- as.data.frame(aictab(cand.set = hembras, 
-                                         modnames = modnames,
-                                         c.hat = c.hat.adults.nb, 
-                                         second.ord = FALSE, 
-                                         sort = TRUE))
-
-hembras.rankings$Deviance <- round(-2*hembras.rankings$Quasi.LL,2) # get deviances
-hembras.rankings <- hembras.rankings[,c(1,2,4,6,9,10)]
-colnames(hembras.rankings) <- c("Model", "K", "Delta_QAIC", 
-                                "QAIC_wt.", "Cum. weight", "Deviance")
-
-kable(hembras.rankings, "html", row.names = FALSE, 
-      caption = "Poisson abundance model rankings for female iguanas", 
-      digits = 3) %>%
-  kable_styling(bootstrap_options = c("striped", "condensed")) %>%
-  scroll_box(height = "350px")
-
-write.csv(hembras.rankings, "data/iguana_hembras_QAIC.csv")
-```
-
-Similar rankings to the full iguana and male populations. 
-
-```{r}
-hembras$p.aspect
-```
-\ 
-\ 
-
-#### **Juvenile iguanas**
-***
-
-Let's now examine juvenile iguana distance sampling models.
-
-```{r, juv-iguanas-compare-detection-functions}
-juvs.hazard <- distsamp(
-  ~veg 
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_juvs, keyfun="hazard", output="density", unitsOut="ha", rel.tol=0.0001)
-
-juvs.halfnorm <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_juvs, keyfun="halfnorm", output="density", unitsOut="ha", rel.tol=0.0001)
-
-juvs.negexp <- distsamp(
-  ~veg
-  ~elev+I(elev^2)+slope+aspect+veg, 
-  umf_juvs, keyfun="exp", output="density", unitsOut="ha", rel.tol=0.0001)
-
-aictab(cand.set = list(juvs.hazard, juvs.halfnorm, juvs.negexp),
-     modnames = c("hazard", "halfnorm", "negative exponential"))
-```
-
-All three detection functions perform similarly. Let's compare the GoF of the half normal and negative exponential functions.
-
-```{r, GoF-juvs, cache = TRUE}
-set.seed(12)
-GoF.juvs.hn <- parboot(juvs.halfnorm, fitstats, nsim=1000, report=5)
-GoF.juvs.hn
-par(mfrow = c(3,1))
-plot(GoF.juvs.hn)
-
-c.hat.juvs.hn <- GoF.juvs.hn@t0[2] / mean(GoF.juvs.hn@t.star[,2]); 
-c.hat.juvs.hn
-
-set.seed(12)
-GoF.juvs.neg <- parboot(juvs.negexp, fitstats, nsim=1000, report=5)
-GoF.juvs.neg
-par(mfrow = c(3,1))
-plot(GoF.juvs.neg)
-
-c.hat.juvs.neg <- GoF.juvs.neg@t0[2] / mean(GoF.juvs.neg@t.star[,2]); 
-c.hat.juvs.neg
-```
-
-The negative exponential function provides a slightly lower c-hat, so let's go with that function. 
-```{r, make-and-compare-juveniles-models, echo = FALSE}
-juvs <- list() # make a list to store hembra models
-juvs$null <- distsamp(~1 ~1,
-                      umf_juvs, 
-                      keyfun="exp", output="density", unitsOut="ha")
-
-juvs$elev <- distsamp(~1 ~elev, 
-                      umf_juvs, 
-                      keyfun="exp", output="density", unitsOut="ha")
-
-juvs$elev2 <- distsamp(~1 ~elev+I(elev^2), 
-                       umf_juvs, 
-                       keyfun="exp", output="density", unitsOut="ha")
-
-juvs$slope <- distsamp(~1 ~slope,  
-                       umf_juvs, 
-                       keyfun="exp", output="density", unitsOut="ha")
-
-juvs$aspect <- distsamp(~1 ~aspect, 
-                        umf_juvs, 
-                        keyfun="exp", output="density", unitsOut="ha")
-
-juvs$veg <- distsamp(~1 ~veg, 
-                     umf_juvs, 
-                     keyfun="exp", output="density", unitsOut="ha")
-
-juvs$topo <- distsamp(~1 ~elev+slope+aspect, 
-                      umf_juvs, 
-                      keyfun="exp", output="density", unitsOut="ha")
-
-juvs$topo2 <- distsamp(~1 ~elev+I(elev^2)+slope+aspect, 
-                       umf_juvs, 
-                       keyfun="exp", output="density", unitsOut="ha")
-
-juvs$subglobal <- distsamp(~1 ~elev+slope+aspect+veg, 
-                           umf_juvs, 
-                           keyfun="exp", output="density", unitsOut="ha")
-
-juvs$global <- distsamp(~1 ~elev+I(elev^2)+slope+aspect+veg, 
-                        umf_juvs, 
-                        keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.null <- distsamp(~veg ~1, 
-                        umf_juvs, 
-                        keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.elev <- distsamp(~veg ~elev, 
-                        umf_juvs, 
-                        keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.elev2 <- distsamp(~veg ~elev+I(elev^2), 
-                         umf_juvs, 
-                         keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.slope <- distsamp(~veg ~slope, 
-                         umf_juvs, 
-                         keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.aspect <- distsamp(~veg ~aspect, 
-                          umf_juvs, 
-                          keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.veg <- distsamp(~veg ~veg, 
-                       umf_juvs, 
-                       keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.topo <- distsamp(~veg ~elev+slope+aspect, 
-                        umf_juvs, 
-                        keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.topo2 <- distsamp(~veg ~elev+I(elev^2)+slope+aspect, 
-                         umf_juvs, 
-                         keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.subglobal <- distsamp(~veg ~elev+slope+aspect+veg, 
-                             umf_juvs, 
-                             keyfun="exp", output="density", unitsOut="ha")
-
-juvs$p.global <- distsamp(~veg ~elev+I(elev^2)+slope+aspect+veg, 
-                          umf_juvs, 
-                          keyfun="exp", output="density", unitsOut="ha")
-
-# Making a QAIC table - list of juvs models for ranking
-# make custom model names showing the variables
-modnames <- c("lambda(.) p(.)", 
-              "lambda(elev) p(.)", 
-              "lambda(elev + elev^2^) p(.)",
-              "lambda(slope) p(.)", 
-              "lambda(aspect) p(.)",
-              "lambda(veg) p(.)", 
-              "lambda(elev + slope + aspect) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect) p(.)",
-              "lambda(elev + slope + aspect + veg) p(.)", 
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(.)", 
-              "lambda(.) p(veg)", 
-              "lambda(elev) p(veg)", 
-              "lambda(elev + elev^2^) p(veg)",
-              "lambda(slope) p(veg)", 
-              "lambda(aspect) p(veg)", 
-              "lambda(veg) p(veg)", 
-              "lambda(elev + slope + aspect) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect) p(veg)",
-              "lambda(elev + slope + aspect + veg) p(veg)",
-              "lambda(elev + elev^2^ + slope + aspect + veg) p(veg)")
-
-# Rank by QAIC and print 
-juvs.rankings <- as.data.frame(aictab(cand.set = juvs, 
-                                      modnames = modnames,
-                                      c.hat = c.hat.juvs.neg, 
-                                      second.ord = FALSE, 
-                                      sort = TRUE))
-
-juvs.rankings$Deviance <- round(-2*juvs.rankings$Quasi.LL,2) # get deviances
-juvs.rankings <- juvs.rankings[,c(1,2,4,6,9,10)]
-colnames(juvs.rankings) <- c("Model", "K", "Delta_QAIC", 
-                             "QAIC_wt.", "Cum. weight", "Deviance")
-
-kable(juvs.rankings, "html", row.names = FALSE, 
-      caption = "Poisson abundance model rankings for juvenile iguanas", 
-      digits = 3) %>%
-  kable_styling(bootstrap_options = c("striped", "condensed")) %>%
-  scroll_box(height = "350px")
-
-write.csv(juvs.rankings, "data/iguana_juvs_QAIC.csv")
-```
-
-We see some support for an elevation effect on juvenile iguanas. The null model is ranked close to the top though, which may be due to the limited amount of data on juvenile iguanas in this dataset. No support really for a vegetation effect on detection.
-
-```{r}
-juvs$elev2
-juvs$p.elev2
-```
-
-Let's visualize our covariate effects on each iguana group. To do this I’ll make model averaged predictions of density across values of each covariate individually, keeping the other covariates at constant values or getting the average value across factor levels for aspect and vegetation type.
-
-```{r, iguana-covariate-predictions, fig.height = 5, fig.width = 8}
-library(plyr)
-# 1. ELEVATION
-elev.sim <- seq(min(covs$elev), max(covs$elev), length.out = 30)
-elev.new <- (elev.sim - mean(covs$elev))/sd(covs$elev)
-## predict function for elevation effect
-elev.pred.fun <- function(mod.list, group.chat){
-  pred = as.data.frame(modavgPred(cand.set = mod.list, type = "response", 
-                                  parm.type = "lambda",
-                                  newdata = 
-                                    data.frame(elev = rep(elev.new, 8),
-                                               slope = 0,
-                                               aspect = c(rep("N", 60), 
-                                                          rep("E", 60), 
-                                                          rep("S", 60), 
-                                                          rep("W", 60)), 
-                                               veg = c(rep(c(rep("Shrubs", 30),
-                                                             rep("Herbaceous", 30)), 
-                                                           4))), 
-                                  c.hat = group.chat)$matrix.output)
-  pred$elev <- rep(elev.sim, 8)
-  pred = ddply(pred, .(elev), summarize, 
-               density.pred = mean(mod.avg.pred),
-               se = mean(uncond.se),
-               lcl = mean(lower.CL),
-               ucl = mean(upper.CL))
-  return(pred)
-}
-elev.pred.males <- elev.pred.fun(machos, c.hat.adults.nb)
-elev.pred.females <- elev.pred.fun(hembras, c.hat.adults.nb)
-elev.pred.juveniles <- elev.pred.fun(juvs, c.hat.juvs.neg)
-
-# 2. SLOPE
-slope.sim <- seq(min(covs$slope), max(covs$slope), length.out = 30)
-slope.new <- (slope.sim - mean(covs$slope))/sd(covs$slope)
-## predict function for slope effect
-slope.pred.fun <- function(mod.list, group.chat){
-  pred = as.data.frame(modavgPred(cand.set = mod.list, type = "response", 
-                                   parm.type = "lambda",
-                                   newdata = 
-                                     data.frame(elev = 0, 
-                                                slope = rep(slope.new, 8),
-                                                aspect = c(rep("N", 60), 
-                                                           rep("E", 60), 
-                                                           rep("S", 60), 
-                                                           rep("W", 60)),
-                                                veg = c(rep(c(rep("Shrubs",30),
-                                                              rep("Herbaceous",30)), 
-                                                            4))), 
-                                   c.hat = group.chat)$matrix.output)
-  pred$slope <- rep(slope.sim, 8)
-  pred = ddply(pred, .(slope), summarize, 
-                density.pred = mean(mod.avg.pred), 
-                se = mean(uncond.se), 
-                lcl = mean(lower.CL), 
-                ucl = mean(upper.CL))
-  return(pred)
-}
-slope.pred.males <- slope.pred.fun(machos, c.hat.adults.nb)
-slope.pred.females <- slope.pred.fun(hembras, c.hat.adults.nb)
-slope.pred.juveniles <- slope.pred.fun(juvs, c.hat.juvs.neg)
-
-# 3. ASPECT
-aspect.pred.fun <- function(mod.list, group.chat){
-  pred = as.data.frame(modavgPred(cand.set = mod.list, type = "response", 
-                                  parm.type = "lambda",
-                                  newdata = 
-                                    data.frame(elev = 0, 
-                                               slope = 0, 
-                                               aspect = c(rep("N", 2), 
-                                                          rep("E", 2), 
-                                                          rep("S", 2), 
-                                                          rep("W", 2)), 
-                                               veg = c(rep(c("Shrubs",
-                                                             "Herbaceous"), 4))), 
-                                  c.hat = group.chat)$matrix.output)
-  pred$aspect <- c(rep("N", 2), rep("E", 2), rep("S", 2), rep("W", 2))
-  pred = ddply(pred, .(aspect), summarize, 
-                density.pred = mean(mod.avg.pred), 
-                se = mean(uncond.se), 
-                lcl = mean(lower.CL), 
-                ucl = mean(upper.CL))
-  return(pred)
-}
-aspect.pred.males <- aspect.pred.fun(machos, c.hat.adults.nb)
-aspect.pred.females <- aspect.pred.fun(hembras, c.hat.adults.nb)
-aspect.pred.juveniles <- aspect.pred.fun(juvs, c.hat.juvs.neg)
-
-# 4. VEGETATION
-veg.pred.fun <- function(mod.list, group.chat){
-  pred = as.data.frame(modavgPred(cand.set = mod.list, type = "response", 
-                                  parm.type = "lambda",
-                                  newdata = 
-                                    data.frame(elev = 0, 
-                                               slope = 0, 
-                                               aspect = c(rep(c("N","E",
-                                                                "S","W"),2)), 
-                                               veg = c(rep("Shrubs",4),
-                                                       rep("Herbaceous",4))), 
-                                  c.hat = group.chat)$matrix.output)
-  pred$veg = c(rep("Shrubs",4),rep("Herbaceous",4))
-  pred = ddply(pred, .(veg), summarize, 
-               density.pred = mean(mod.avg.pred), 
-               se = mean(uncond.se), 
-               lcl = mean(lower.CL), 
-               ucl = mean(upper.CL))
-  return(pred)
-}
-veg.pred.males <- veg.pred.fun(machos, c.hat.adults.nb)
-veg.pred.females <- veg.pred.fun(hembras, c.hat.adults.nb)
-veg.pred.juveniles <- veg.pred.fun(juvs, c.hat.juvs.neg)
-  
-# combine model-averaged covariate predictions by sex
-elev.pred <- rbind(elev.pred.males, elev.pred.females, elev.pred.juveniles)
-elev.pred$Sex <- c(rep("Males", 30), rep("Females", 30), rep("Juveniles", 30))
-elev.pred$Sex <- factor(elev.pred$Sex, 
-                        levels = c("Juveniles", "Females", "Males"))
-
-slope.pred <- rbind(slope.pred.males, slope.pred.females, slope.pred.juveniles)
-slope.pred$Sex <- c(rep("Males", 30), rep("Females", 30), rep("Juveniles", 30))
-slope.pred$Sex <- factor(slope.pred$Sex, 
-                         levels = c("Juveniles", "Females", "Males"))
-
-aspect.pred <- rbind(aspect.pred.males, aspect.pred.females, aspect.pred.juveniles)
-aspect.pred$Sex <- c(rep("Males", 4), rep("Females", 4), rep("Juveniles", 4))
-aspect.pred$Sex <- factor(aspect.pred$Sex, 
-                          levels = c("Juveniles", "Females", "Males"))
-
-veg.pred <- rbind(veg.pred.males, veg.pred.females, veg.pred.juveniles)
-veg.pred$Sex <- c(rep("Males", 2), rep("Females", 2), rep("Juveniles", 2))
-veg.pred$Sex <- factor(veg.pred$Sex, 
-                       levels = c("Juveniles", "Females", "Males"))
-
-# PLOTS
-elev.plot <- ggplot(elev.pred, aes(x = elev, y = density.pred, col = Sex)) + 
-  geom_line(lwd = 1.1) + geom_line(aes(y = lcl), lty = "dashed") + 
-  geom_line(aes(y = ucl), lty = "dashed") + 
-  labs(x = "Elevation (m)", y = NULL) + ylim(c(0,7)) + 
-  theme_classic() + mythemes + 
-  scale_color_brewer(palette = "Dark2")
-
-slope.plot <- ggplot(slope.pred, aes(x = slope, y = density.pred, col = Sex)) + 
-  geom_line(lwd = 1.1) + geom_line(aes(y = lcl), lty = "dashed") + 
-  geom_line(aes(y = ucl), lty = "dashed") + 
-  labs(x = "Slope", y = NULL) + ylim(c(0,7)) + 
-  theme_classic() + mythemes + 
-  scale_color_brewer(palette = "Dark2")
-
-aspect.plot <- ggplot(aspect.pred, aes(x = aspect, y = density.pred, col = Sex)) +
-  geom_point(position=position_dodge(0.5)) + 
-  geom_errorbar(aes(ymin = lcl, ymax = ucl), width = 0.5, 
-                position=position_dodge(0.5)) + 
-  labs(x = "Aspect", y = NULL) + ylim(c(0,7)) + 
-  theme_classic() + mythemes + 
-  scale_color_brewer(palette = "Dark2")
-
-veg.plot <- ggplot(veg.pred, aes(x = veg, y = density.pred, col = Sex)) + 
-  geom_point(position=position_dodge(0.5)) + 
-  geom_errorbar(aes(ymin = lcl, ymax = ucl), width = 0.25, 
-                position=position_dodge(0.5)) + 
-  labs(x = "Vegetation", y = NULL) + ylim(c(0,7)) +
-  theme_classic() + mythemes + 
-  scale_color_brewer(palette = "Dark2")
-
-combined.pred.plots <- ggarrange(elev.plot, slope.plot, 
-                                 aspect.plot, veg.plot, nrow = 2, ncol = 2, 
-                                 common.legend = TRUE, legend = "bottom",
-                                 labels = c("a", "b", "c", "d"),
-                                 label.x = c(rep(0.1, 4)))
-
-annotate_figure(combined.pred.plots,
-                left = text_grob(expression(Iguanas ~ ha^-1), 
-                                 rot = 90, size = 18))
-```
-
-Adult iguanas, particularly males, seem to show a greater affinity for northern and western slopes.
-
-It appears that the elevation effect on juveniles is possibly a statistical artifact of their small sample size. There may be a lower volume of iguanas at low elevations (i.e., near coastal). But we'll need a larger sample to confirm that effect.
-
-\ 
-\ 
-
-#### **Distribution and abundance**
-***
-
-Let's now obtain model-averaged abundance estimates and distribution maps for the iguana population on Santa Fe from the full-island survey in 2011.
-
-First we need to load and stack rasters of the covariates.
-
-```{r}
-library(raster)
-library(sp)
-library(rgdal)
-library(rasterVis)
-library(viridis)
-# load rasters
-elev <- raster("data/elev_z_ha_2")
-slope <- raster("data/slope_z_ha_2")
-aspect <- raster("data/aspect_ha_2")
-veg <- raster("data/veg_ha_2")
-
-# stack rasters
-santafe.raster <- stack(elev, slope, aspect, veg)
-names(santafe.raster) <- c("elev", "slope", "aspect", "veg")
-# note: continuous rasters are on z-scale to match the data in the models
-# for aspect: N = 1, E = 2, S = 3, W = 4
-# for veg: Shrubs = 1, Herbaceous = 2
-plot(santafe.raster)
-```
-
-Now we can make our predictions.
-
-```{r, fig.height=7, fig.width=12}
-# convert covariate rasters to data frame with each row representing one pixel
-raster.covs <- as.data.frame(santafe.raster, xy = TRUE)
-raster.covs$ID <- rownames(raster.covs)
-# reassign categorical covariates to match what was put into the models
-raster.covs$veg <- "Herbaceous"
-raster.covs$veg[raster.covs$veg_COUNT == 1610] <- "Shrubs"
-raster.covs$aspect <- "E"
-raster.covs$aspect[raster.covs$aspect_COUNT == 605] <- "N"
-raster.covs$aspect[raster.covs$aspect_COUNT == 809] <- "S"
-raster.covs$aspect[raster.covs$aspect_COUNT == 279] <- "W"
-newdat <- 
-  na.omit(data.frame(elev = raster.covs$elev, 
-                     slope = raster.covs$slope, 
-                     aspect = as.factor(raster.covs$aspect), 
-                     veg = as.factor(raster.covs$veg)))
-
-## males
-male.pred <- modavgPred(cand.set = machos, type = "response", 
-                        parm.type = "lambda", newdata = newdat, 
-                        c.hat = c.hat.adults.nb)
-male.pred <- data.frame(ID = rownames(newdat),
-                        lambda = male.pred$mod.avg.pred,
-                        lcl = male.pred$lower.CL,
-                        ucl = male.pred$upper.CL)
-# combine predictions with XY data
-male.pred <- merge(male.pred, raster.covs, by = "ID", all = TRUE)
-male.pred.est <- male.pred[,c(5,6,2)]
-male.pred.lower <- male.pred[,c(5,6,3)]
-male.pred.upper <- male.pred[,c(5,6,4)]
-
-## females
-female.pred <- modavgPred(cand.set = hembras, type = "response", 
-                          parm.type = "lambda", newdata = newdat, 
-                          c.hat = c.hat.adults.nb)
-female.pred <- data.frame(ID = rownames(newdat),
-                        lambda = female.pred$mod.avg.pred,
-                        lcl = female.pred$lower.CL,
-                        ucl = female.pred$upper.CL)
-# combine predictions with XY data
-female.pred <- merge(female.pred, raster.covs, by = "ID", all = TRUE)
-female.pred.est <- female.pred[,c(5,6,2)]
-female.pred.lower <- female.pred[,c(5,6,3)]
-female.pred.upper <- female.pred[,c(5,6,4)]
-
-## juveniles
-juv.pred <- modavgPred(cand.set = juvs, type = "response", 
-                          parm.type = "lambda", newdata = newdat, 
-                       c.hat = c.hat.juvs.neg)
-juv.pred <- data.frame(ID = rownames(newdat),
-                        lambda = juv.pred$mod.avg.pred,
-                        lcl = juv.pred$lower.CL,
-                        ucl = juv.pred$upper.CL)
-# combine predictions with XY data
-juv.pred <- merge(juv.pred, raster.covs, by = "ID", all = TRUE)
-juv.pred.est <- juv.pred[,c(5,6,2)]
-juv.pred.lower <- juv.pred[,c(5,6,3)]
-juv.pred.upper <- juv.pred[,c(5,6,4)]
-
-## total
-## from subgroup estimates
-total.pred.sum = data.frame(x = juv.pred.est$x,
-                            y = juv.pred.est$y,
-                            lambda = 
-                              juv.pred.est$lambda + 
-                              male.pred.est$lambda +
-                              female.pred.est$lambda)
-total.pred.sum.lower = data.frame(x = juv.pred.lower$x,
-                                  y = juv.pred.lower$y,
-                                  lcl = 
-                                    juv.pred.lower$lcl + 
-                                    male.pred.lower$lcl +
-                                    female.pred.lower$lcl)
-total.pred.sum.upper = data.frame(x = juv.pred.upper$x,
-                                  y = juv.pred.upper$y,
-                                  ucl = 
-                                    juv.pred.upper$ucl + 
-                                    male.pred.upper$ucl +
-                                    female.pred.upper$ucl)
-## from full dataset models
-total.pred <- modavgPred(cand.set = all, type = "response", 
-                         parm.type = "lambda", newdata = newdat, 
-                         c.hat = c.hat.all.nb)
-total.pred <- data.frame(ID = rownames(newdat),
-                        lambda = total.pred$mod.avg.pred,
-                        lcl = total.pred$lower.CL,
-                        ucl = total.pred$upper.CL)
-# combine predictions with XY data
-total.pred <- merge(total.pred, raster.covs, by = "ID", all = TRUE)
-total.pred.est <- total.pred[,c(5,6,2)]
-total.pred.lower <- total.pred[,c(5,6,3)]
-total.pred.upper <- total.pred[,c(5,6,4)]
-
-# combine predictions into one plot
-library(lattice)
-library(grid)
-library(gridExtra)
-library(colorRamps)
-library(grDevices)
-
-r1 <- ggplot(juv.pred.est, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lambda)) +
-  geom_polygon(inherit.aes = FALSE, data = santafe.shp, 
-               color = "black", fill = "transparent", lwd = 1.1, 
-               aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") +  
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(a) juveniles") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + coord_equal()
-
-r2 <- ggplot(female.pred.est, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lambda)) + 
-  geom_polygon(inherit.aes = FALSE, data = santafe.shp, 
-               color = "black", fill = "transparent", lwd = 1.1, 
-               aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(b) females") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + coord_equal()
-
-r3 <- ggplot(male.pred.est, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lambda)) + 
-  geom_polygon(inherit.aes = FALSE, data = santafe.shp, 
-               color = "black", fill = "transparent", lwd = 1.1, 
-               aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(c) males") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + coord_equal()
-
-r4 <- ggplot(total.pred.sum, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lambda)) + 
-  geom_polygon(inherit.aes = FALSE, data = santafe.shp, 
-               color = "black", fill = "transparent", lwd = 1.1, 
-               aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(d) total") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + coord_equal()
-
-ggarrange(r1, r2, r3, r4, ncol = 2, nrow = 2, common.legend = FALSE)
-```
-
-
-What is the total estimated population size (with confidence limits) from summing the pixel values of juveniles, females, and males?
-
-```{r}
-juvenile.pop.2011 <- data.frame(abundance = sum(na.omit(juv.pred$lambda)), 
-                                lcl = sum(na.omit(juv.pred$lcl)),
-                                ucl = sum(na.omit(juv.pred$ucl)))
-female.pop.2011 <- data.frame(abundance = sum(na.omit(female.pred$lambda)), 
-                                lcl = sum(na.omit(female.pred$lcl)),
-                                ucl = sum(na.omit(female.pred$ucl)))
-male.pop.2011 <- data.frame(abundance = sum(na.omit(male.pred$lambda)), 
-                                lcl = sum(na.omit(male.pred$lcl)),
-                                ucl = sum(na.omit(male.pred$ucl)))
-# total estimate as sum of separate juvenile and adult estimates
-total.pop.2011 <- data.frame(abundance = 
-                               juvenile.pop.2011$abundance +
-                               female.pop.2011$abundance +
-                               male.pop.2011$abundance,
-                             lcl = 
-                               juvenile.pop.2011$lcl +
-                               female.pop.2011$lcl +
-                               male.pop.2011$lcl,
-                             ucl =
-                               juvenile.pop.2011$ucl +
-                               female.pop.2011$ucl +
-                               male.pop.2011$ucl)
-
-# separate total estimate from the complete dataset
-total.pop.2011.sep <- data.frame(abundance = sum(na.omit(total.pred$lambda)), 
-                                 lcl = sum(na.omit(total.pred$lcl)),
-                                 ucl = sum(na.omit(total.pred$ucl)))
-
-# print the population estimates
-iguana.pop.2011 <- rbind(juvenile.pop.2011, female.pop.2011, 
-                         male.pop.2011, total.pop.2011)
-iguana.pop.2011$type <- c("juveniles", "females", "males", "total")
-iguana.pop.2011 <- iguana.pop.2011[,c(4,1,2,3)]
-iguana.pop.2011
-
-# print the separate total population estimate
-total.pop.2011.sep
-```
-
-We can also map the 95% CI bounds for these density estimates.
-
-Here are the lower bounds of the density estimates.
-
-```{r, fig.height=7, fig.width=12}
-r1 <- ggplot(juv.pred.lower, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lcl)) +
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") +  
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(a) juveniles") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r2 <- ggplot(female.pred.lower, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lcl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(b) females") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r3 <- ggplot(male.pred.lower, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lcl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(c) males") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r4 <- ggplot(total.pred.sum.lower, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = lcl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(d) total") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-ggarrange(r1, r2, r3, r4, ncol = 2, nrow = 2, common.legend = FALSE)
-```
-
-And here are the upper bounds.
-
-```{r, fig.height=7, fig.width=12}
-r1 <- ggplot(juv.pred.upper, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = ucl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) +
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") +  
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(a) juveniles") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r2 <- ggplot(female.pred.upper, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = ucl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(b) females") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r3 <- ggplot(male.pred.upper, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = ucl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes +
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(c) males") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-r4 <- ggplot(total.pred.sum.upper, aes(x = x, y = y)) + 
-  geom_tile(aes(fill = ucl)) + 
-  geom_polygon(inherit.aes = FALSE, 
-               data = santafe.shp, color = "black", fill = "transparent", 
-               lwd = 1.1, aes(x = long, y = lat)) + 
-  scale_fill_gradientn(colors = c("darkgreen", "yellow", "red3"), 
-                       na.value = "transparent") + 
-  theme_bw() + mythemes + 
-  labs(x = "\nLongitude", y = "Latitude\n", title = "(d) total") + 
-  guides(fill = guide_colorbar(raster = TRUE, 
-                               title = expression(Iguanas ~ ha^-1), 
-                               title.position = "top")) + 
-  coord_equal()
-
-ggarrange(r1, r2, r3, r4, ncol = 2, nrow = 2, common.legend = FALSE)
-```
-
-### Changes from 2011--2020
-
-Now let's use hierarchical distance sampling models to compare density estimates between years from our iguana transects. We are only using a subset of the original island-wide transects here that are within the center of the island where tortoises were released. These transects (n=28), and the permanent plots in between them, were visited three times, once before and twice after tortoise introduction.
+Now let's use hierarchical distance sampling models [@Buckland2001; @Outline2016c] to compare density estimates between years from our iguana transects. We are only using a subset of the original island-wide transects here that are within the center of the island where tortoises were released. These transects (n=28), and the permanent plots in between them, were visited three times, once before and twice after tortoise introduction.
 
 Here is all our data prep code to run the distance sampling models in `unmarked`. We're going to stack transects by year to get abundance estimates as a function of time, tortoise density, and other covariates.
 
 ```{r}
-# detach plyr to avoid conflicts
-detach("package:plyr", unload = TRUE)
 ### LOAD DISTANCE SAMPLING DATA OF SUBSET OF TRANSECTS ###
-library(readxl)
 iguanas <- suppressMessages(read_excel("data/iguanas_distsamp_2011_2017_2020.xlsx", 
                                        na = "NA"))
 iguanas$transect_yr <- as.factor(paste(iguanas$transect, iguanas$year, sep = "-"))
@@ -4301,6 +2636,7 @@ iguanas.sub$quantile <- q.rank(iguanas.sub$distance)
 max.dist <- min(iguanas.sub$distance[iguanas.sub$quantile >= 0.975], na.rm = T)
 
 # prepare observations and covariates for unmarked
+library(unmarked)
 ydat <- formatDistData(iguanas.sub,
                        distCol="distance",
                        transectNameCol="transect_yr",
@@ -4361,9 +2697,11 @@ umf <-
 summary(umf)
 ```
 
-Let's examine our covariates to see if we have any colinearity in our geographic and new tortoise covariates before running our distance sampling models.
+Let's examine our covariates to see if we have any colinearity in our geographic and new tortoise covariates before running our distance sampling models. Note: our covariates were linked to each transect in GIS by extending a 50m buffer around each transect (with flat ends) and calculating mean or modal values of elevation, slope, and vegetation type for each buffer zone.
 
-```{r, echo = FALSE}
+Let's look at the variance inflation factors (VIFs) to see if there is any colinearity.
+
+```{r}
 # get VIF w current tortoise density variable
 corvif(covs[,c(3,4,6,7,8,14)]) # no colinearity
 # get VIF w recent tortoise density variable
@@ -4400,6 +2738,7 @@ nexp.t2 <- distsamp(
   ~time+I(time^2)+year ~elev+slope+veg+tden5yr+year,
   umf, keyfun="exp", output="density", unitsOut="ha")
 
+library(AICcmodavg)
 aictab(cand.set = list(haz.t, hn.t, nexp.t,
                        haz.t2, hn.t2, nexp.t2),
        modnames = c("hazard", "halfnorm", "negexp",
@@ -4408,7 +2747,18 @@ aictab(cand.set = list(haz.t, hn.t, nexp.t,
 
 We're going to go with the negative exponential detection function to model iguana density. Let's run our goodness of fit tests.
 
-```{r}
+```{r, GoF-iguana-global-distsamp-model}
+fitstats <- function(fm) {
+    observed <- getY(fm@data)
+    expected <- fitted(fm)
+    resids <- residuals(fm)
+    sse <- sum(resids^2)
+    chisq <- sum((observed - expected)^2 / expected, na.rm = TRUE)
+    freeTuke <- sum((sqrt(observed) - sqrt(expected))^2, na.rm = TRUE)
+    out <- c(SSE=sse, Chisq=chisq, freemanTukey=freeTuke)
+    return(out)
+}
+
 set.seed(1)
 GoF <- parboot(nexp.t, fitstats, nsim=1000, report=5) ; GoF
 observed <- data.frame(test = names(GoF@t0),
@@ -4433,7 +2783,7 @@ There is very slight overdispersion, so let's account for that in our model rank
 
 Here is our candidate list of models.
 
-```{r}
+```{r, make-iguana-distsamp-models}
 # create candidate models, rank with QAIC
 nexp.null <- distsamp(
   ~1 ~1,
@@ -4466,7 +2816,7 @@ nexp.full.5y <- distsamp(
 
 We'll rank models with the `aictab` function from the `AICcmodavg` package.
 
-```{r}
+```{r, rank-iguana-distsamp-models}
 iguana.rankings <- 
   aictab(cand.set = list(nexp.null, nexp.year, nexp.hab, nexp.tden, 
                          nexp.tden5y, nexp.full, nexp.full.5y), c.hat = c.hat,
@@ -4477,7 +2827,7 @@ iguana.rankings
 write.csv(iguana.rankings, "data/iguana_model_rankings_stacked.csv")
 ```
 
-Interesting. The year model is on top and nothing is within 2 QAICc units, which suggests that iguana population does not vary with our tortoise and/or environmental covariates.
+Interesting. The year model is on top and only the tortoises models are competitive; however, those tortoise models are closely ranked to the null model as well, suggesting that the iguana population does not vary strongly with our tortoise and certainly not with the other environmental covariates.
 
 Let's look at the parameter estimates from that year model.
 
@@ -4485,7 +2835,7 @@ Let's look at the parameter estimates from that year model.
 summary(nexp.year)
 ```
 
-It does not appear that iguana density changes significantly over time. Detection rates may be greater in 2020. No hour effect on detection probability.
+It does not appear that iguana density changes much over time. Detection rates may be greater in 2020. No hour effect on detection probability.
 
 Out of curiosity, what do the next two models with the tortoise density look like?
 
@@ -4494,11 +2844,11 @@ nexp.tden5y
 nexp.tden
 ```
 
-Tortoise density has no effect on iguana density.
+Tortoise density has no clear effect on iguana density.
 
 Let's use the top model plot out our iguana density estimates for 2011, 2017, and 2020 (and include our tortoise density estimates in the plot as a reference).
 
-```{r}
+```{r, iguana-tortoise-density-estimates, fig.width = 7, fig.height = 5}
 library(adehabitatHR)
 # get minimal convex polygon of transect coordinates
 transect.points <- 
@@ -4519,8 +2869,6 @@ i.lambda$N_upper = i.lambda$upper * survey.zone$area
 i.lambda$pct_change = (i.lambda$N_hat - i.lambda$N_hat[1])/i.lambda$N_hat[1]
 i.lambda$pct_change_lwr = (i.lambda$N_lower - i.lambda$N_lower[1])/i.lambda$N_lower[1]
 i.lambda$pct_change_upr = (i.lambda$N_upper - i.lambda$N_upper[1])/i.lambda$N_upper[1] 
-
-i.lambda
 
 # get mean tortoise density in 2017 and 2020 in survey zone
 t.lambda <- 
@@ -4572,13 +2920,13 @@ distsamp.plot <-
 distsamp.plot
 ```
 
-The population may increased slightly from 2011 to 2020 (~ 529 [421--512] individuals or 34% [17--55%]), but there is a lot of uncertainty around those estimates so there is no strong evidence to support any iguana change over time or tortoise impact on iguana distribution or abundance. This could change as tortoises get larger and begin reproducing, thus having a more sustained impact on the environment in Santa Fe. Future monitoring will be essential to verify any impacts on the iguana population.
+The population may have increased slightly from 2011 to 2020 (~ 529 [421--512] individuals or 34% [17--55%]), but there is a lot of uncertainty around those estimates so there is no strong evidence to support any iguana change over time or tortoise impact on iguana distribution or abundance. This could change as tortoises get larger and begin reproducing, thus having a more sustained impact on the environment in Santa Fe. Future monitoring will be essential to verify any impacts on the iguana population.
 
 Let's ask the same question about iguana population change using the repeated plot counts from 2011 and 2020.
 
-## Plot data
+## Iguana trends (plots)
 
-```{r}
+```{r, read-plot-data}
 # load data
 plots2011 <- 
   suppressMessages(read_excel("data/iguana_plots_2011_2017_2020.xlsx", 
@@ -4593,7 +2941,7 @@ plots2020 <-
 
 Plots were also measured in 2017, but iguana data from at least 10 plots from the core zone were lost and unrecoverable. So we will focus on the two years, 2011 (before) and 2020 (after) which we have complete data for.
 
-```{r}
+```{r, prepare-plot-data}
 # filter the 2011 data to include only those plots that were surveyed in 2020
 plots2011 <- plots2011 %>%
   filter(Punto %in% plots2020$Punto)
@@ -4618,7 +2966,7 @@ iguana_plots <-
 
 First let's use a Wilcoxin test to compare iguana and iguana fecal density in plots between 2011 and 2020.
 
-```{r}
+```{r, iguana-wilcoxin-tests}
 # male iguanas
 pop.diff.m <- wilcox.test(iguana_plots$ITM2011, iguana_plots$ITM2020, 
                           paired = TRUE); pop.diff.m
@@ -4635,82 +2983,13 @@ fec.diff <- wilcox.test(iguana_plots$HI2011, iguana_plots$HI2020,
 
 According to these tests, there are no differences in iguana density before and after tortoise introductions. But there are a lot of plots with no differences between years, and those measurements are ignored in the significance test. There is a difference in iguana feces (more in 2020), but that may simply be due to human measurement error (including confusion with juvenile tortoise feces).
 
-Let's also look at the same comparisons with Wilcoxin tests for cactus plot counts.
-
-```{r}
-# juvenile cactus
-pop.diff.cj <- wilcox.test(iguana_plots$CJ2011, iguana_plots$CJ2020, 
-                           paired = TRUE); pop.diff.cj
-# subadult cactus
-pop.diff.cs <- wilcox.test(iguana_plots$CS2011, iguana_plots$CS2020, 
-                           paired = TRUE); pop.diff.cs
-# adult cactus
-pop.diff.ca <- wilcox.test(iguana_plots$CA2011, iguana_plots$CA2020, 
-                           paired = TRUE); pop.diff.ca
-# total cactus
-pop.diff.ct <- wilcox.test(iguana_plots$CT2011, iguana_plots$CT2020, 
-                           paired = TRUE); pop.diff.ct
-
-library(broom)
-library(tidyr)
-iguana_plots %>%
-  dplyr::select(Plot, CJ2011, CJ2020, CS2011, CS2020, 
-                CA2011, CA2020, CT2011, CT2020) %>%
-  pivot_longer(-Plot, names_to = "CountStage", values_to = "Count") %>%
-  mutate(Year = ifelse(CountStage %in% c("CJ2011", "CS2011", "CA2011", "CT2011"), 
-                       "2011", "2020"),
-         Stage = case_when(CountStage %in% c("CJ2011", "CJ2020") ~ "Juvenile",
-                           CountStage %in% c("CS2011", "CS2020") ~ "Subadult",
-                           CountStage %in% c("CA2011", "CA2020") ~ "Adult",
-                           CountStage %in% c("CT2011", "CT2020") ~ "Total"),
-         Label = case_when(Stage %in% "Juvenile" ~ "a",
-                           Stage %in% "Subadult" ~ "b",
-                           Stage %in% "Adult" ~ "c",
-                           Stage %in% "Total" ~ "d"),
-         Stage = factor(Stage, levels = c("Juvenile", "Subadult", "Adult", "Total")),
-         p_value = case_when(CountStage %in% c("CJ2011", "CJ2020") ~ 
-                               pop.diff.cj$p.value,
-                             CountStage %in% c("CS2011", "CS2020") ~ 
-                               pop.diff.cs$p.value,
-                             CountStage %in% c("CA2011", "CA2020") ~ 
-                               pop.diff.ca$p.value,
-                             CountStage %in% c("CT2011", "CT2020") ~ 
-                               pop.diff.ct$p.value)) %>%
-  group_by(Stage) %>%
-  mutate(label.y = max(Count)) %>% ungroup() %>%
-  ggpaired(x = "Year", y = "Count", id = "Plot", 
-           color = "Year", line.color = alpha("grey", 0.2),
-           line.size = 0.4, palette = "jco") +
-  # wilcox paired test
-  stat_compare_means(paired = TRUE, label.x = 1.2, size = 3) +
-  geom_text(aes(x = 0.5,  y = label.y, label = Label, size = 4)) +
-  facet_wrap(~Stage, nrow = 2, scales = "free") + 
-  theme_classic() + mythemes +
-  labs(x = "Year", y = "Cactus per plot") +
-  theme(legend.position = "none") -> cactus.wilcox.plot
-
-cactus.wilcox.plot
-```
-
-At all stages, we see changes in cactus density. There is a very weak change in adult cactus.
-
-Let's just tabulate a summary of cactus density in our plots before and after tortoise reintroduction.
-
-```{r}
-t(
-    sapply(iguana_plots[,16:23], function(...) 
-      list(means = mean(..., na.rm = T)/((pi*25^2)/10000), 
-           se = (sd(..., na.rm = T)/sqrt(43))/((pi*25^2)/10000)))
-  )
-```
-
 ### Iguana count GLMM
 
-We'll mixed models to compare iguana plot counts of iguanas and cactus in 2011 and 2020 with the `lme4` package. This will help us understand the direction of these trends for cactus.
+We'll also use generalized linear mixed models to compare iguana plot counts of iguanas and cactus in 2011 and 2020 with the `lme4` package/
 
 Let's connect our tortoise density raster to the iguana plot data. I'll create a shapefile from the plot points, and summarize the recent (5yr average) tortoise density surrounding those points (50m buffer).
 
-```{r}
+```{r, prepare-plot-data-for-GLMMs}
 # create shapefile for plots
 iguana_plots_shp <- iguana_plots
 coordinates(object = iguana_plots_shp) <- ~ Lon + Lat
@@ -4736,7 +3015,6 @@ iguana_plots$tdencat <-
   as.factor(ifelse(iguana_plots$tden5y < quantile(iguana_plots$tden5y, 0.5), 
                    "low", "high"))
 
-library(reshape2)
 # melt iguana data
 iguana.melt <- iguana_plots %>%
   dplyr::select(c(Plot, ITM2011, ITM2020, ITH2011, ITH2020, 
@@ -4786,7 +3064,7 @@ iguana.total <- iguana.melt %>%
 
 Now let's build our GLMM and plot out the time * tortoise contrast.
 
-```{r}
+```{r, iguana-GLMM, fig.width = 7, fig.height = 5}
 library(lme4)
 library(lmerTest)
 library(DHARMa)
@@ -4823,7 +3101,7 @@ ggpredict(iguana.yearXtort, terms = c("year", "tdencat"),
          conf.high = conf.high / ((pi*25^2)/100^2)) -> iguana.pred
 
 # plot iguana density predictions
-quadrant.plot <-
+iguana.plot.estimates <-
   ggplot(iguana.pred, aes(x = x, y = predicted, group = group, fill = group)) +
   geom_col(stat = "identity", position = position_dodge(0.5), width = 0.4) + 
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
@@ -4833,16 +3111,87 @@ quadrant.plot <-
   theme(legend.position = c(.8,.8), legend.title = element_text(size = 13), 
         legend.text = element_text(size = 12))
 
-quadrant.plot
+iguana.plot.estimates
 ```
 
-This model from the plot data tells that the total iguana population has not changed much from 2011 to present. Overall, the plots suggest a slight decline in the tortoise release zone after repatriation (in contrast to the distance sampling data). The distribution of iguanas may have shifted, with tortoises displacing some iguanas to other areas that were less occupied before. But the interaction between tortoise density and time was very weak.
+This model from the plot data suggests that the total iguana population has not changed from 2011 to present. There was a positive association between tortoise density and iguana plot counts, which could reflect a common underlying habitat suitability. The distribution of iguanas may have shifted, with tortoises displacing some iguanas to other areas that were less occupied before. But the interaction between tortoise density and time was not important in our model.
+
+## Cactus trends
+
+Let's finally look at how cactus densities have changed over time with tortoises in the same long-term monitoring plots using the same Wilcoxin tests and GLMM model structure. 
+
+### Wilcoxin tests
+
+```{r, cactus-wilcoxin-tests, fig.width = 7, fig.height = 5}
+# juvenile cactus
+pop.diff.cj <- wilcox.test(iguana_plots$CJ2011, iguana_plots$CJ2020, 
+                           paired = TRUE); pop.diff.cj
+# subadult cactus
+pop.diff.cs <- wilcox.test(iguana_plots$CS2011, iguana_plots$CS2020, 
+                           paired = TRUE); pop.diff.cs
+# adult cactus
+pop.diff.ca <- wilcox.test(iguana_plots$CA2011, iguana_plots$CA2020, 
+                           paired = TRUE); pop.diff.ca
+# total cactus
+pop.diff.ct <- wilcox.test(iguana_plots$CT2011, iguana_plots$CT2020, 
+                           paired = TRUE); pop.diff.ct
+
+library(broom)
+library(tidyr)
+iguana_plots %>%
+  dplyr::select(Plot, CJ2011, CJ2020, CS2011, CS2020, 
+                CA2011, CA2020, CT2011, CT2020) %>%
+  pivot_longer(-Plot, names_to = "CountStage", values_to = "Count") %>%
+  mutate(Year = ifelse(CountStage %in% c("CJ2011", "CS2011", "CA2011", "CT2011"), 
+                       "2011", "2020"),
+         Stage = case_when(CountStage %in% c("CJ2011", "CJ2020") ~ "Juveniles",
+                           CountStage %in% c("CS2011", "CS2020") ~ "Subadults",
+                           CountStage %in% c("CA2011", "CA2020") ~ "Adults",
+                           CountStage %in% c("CT2011", "CT2020") ~ "Total"),
+         Label = case_when(Stage %in% "Juveniles" ~ "a",
+                           Stage %in% "Subadults" ~ "b",
+                           Stage %in% "Adults" ~ "c",
+                           Stage %in% "Total" ~ "d"),
+         Stage = factor(Stage, levels = c("Juveniles", "Subadults", 
+                                          "Adults", "Total")),
+         p_value = 
+           case_when(CountStage %in% c("CJ2011", "CJ2020") ~ pop.diff.cj$p.value,
+                     CountStage %in% c("CS2011", "CS2020") ~ pop.diff.cs$p.value,
+                     CountStage %in% c("CA2011", "CA2020") ~ pop.diff.ca$p.value,
+                     CountStage %in% c("CT2011", "CT2020") ~ pop.diff.ct$p.value)) %>%
+  group_by(Stage) %>%
+  mutate(label.y = max(Count)) %>% ungroup() %>%
+  ggpaired(x = "Year", y = "Count", id = "Plot", 
+           color = "Year", line.color = alpha("grey", 0.2),
+           line.size = 0.4, palette = "jco") +
+  # wilcox paired test
+  stat_compare_means(paired = TRUE, label.x = 1.2, size = 3) +
+  geom_text(aes(x = 0.5,  y = label.y, label = Label, size = 4)) +
+  facet_wrap(~Stage, nrow = 2, scales = "free") + 
+  theme_classic() + mythemes +
+  labs(x = "Year", y = "Cacti per plot") +
+  theme(legend.position = "none") -> cactus.wilcox.plot
+
+cactus.wilcox.plot
+```
+
+At all stages, we see changes in cactus density. There is a very weak change in adult cactus.
+
+Let's just tabulate a summary of cactus density in our plots before and after tortoise reintroduction.
+
+```{r, cactus-density-estimates-in-plots}
+t(
+    sapply(iguana_plots[,16:23], function(...) 
+      list(means = mean(..., na.rm = T)/((pi*25^2)/10000), 
+           se = (sd(..., na.rm = T)/sqrt(43))/((pi*25^2)/10000)))
+  )
+```
 
 ### Cactus count GLMMs
 
-Let's finally look at how cactus densities have changed over time with tortoises using the same model structure. Starting with *juvenile* cactus.
+Finally, let's construct the GLMMs for cactus plot counts. We'll do this for each age class of cactus and the total count, starting with *juvenile* cactus.
 
-```{r}
+```{r, cactus-juvenile-GLMM}
 # models
 ## null
 cactus.null <-glmer(CJ ~ 1 + (1|Plot), 
@@ -4896,7 +3245,7 @@ Juvenile cactus counts have increased---almost tripled---before and after tortoi
 
 What about *subadult* cactus?
 
-```{r}
+```{r, cactus-subadult-GLMM}
 # models
 ## null
 cactus.null <-glmer(CS ~ 1 + (1|Plot), 
@@ -4943,7 +3292,7 @@ Again we see an increase in subadult cactus. The effect here is weaker than for 
 
 What about **adult** cactus? We shouldn't see a noticeable change here.
 
-```{r}
+```{r, cactus-adult-GLMM}
 # models
 ## null
 cactus.null <-glmer(CA ~ 1 + (1|Plot), 
@@ -4990,7 +3339,7 @@ There is a slight decline in adult cactus counts from 2011 to 2020.
 
 Let's look at *total* cactus change.
 
-```{r}
+```{r, cactus-total-GLMM}
 # models
 ## null
 cactus.null <-glmer(CT ~ 1 + (1|Plot), 
@@ -5037,17 +3386,19 @@ Overall, we see an increase in cactus in the tortoise release zone on Santa Fe b
 
 Let's pull all these cactus figures together.
 
-```{r, fig.height = 6, fig.width = 8}
+```{r, cactus-GLMMs, fig.height = 5, fig.width = 7}
 ggarrange(quadrant.cj.plot, quadrant.cs.plot, 
           quadrant.ca.plot, quadrant.ct.plot,
           nrow = 2, ncol = 2, labels = c("a", "b", "c", "d"), align = "hv",
-          label.x = c(0.19, 0.19, 0.19, 0.19), common.legend = TRUE)
+          label.x = c(0.23, 0.23, 0.23, 0.23), common.legend = TRUE, legend = "bottom") +
+  theme(plot.margin = unit(c(10,0,0,0), "mm")) +
+  annotate("text", x = 0.5, y = 1.02, label = "Cactus change", size = 5)
 ```
 
 
 It may also be helpful to visualize changes in proportions of different age classes of cactus from 2011 to 2020.
 
-```{r}
+```{r, cactus-stage-composition}
 iguana.class.tab <-
   data.frame(year = rep(iguana.total$year, 3),
              iguana = c(iguana.total$CJ, iguana.total$CS, iguana.total$CA),
@@ -5070,10 +3421,27 @@ cactus.prop.plot <-
   geom_text(aes(label = round(mean_prop,2), y = mean_prop), 
             position = position_stack(vjust = 0.5), size = 4) +
   scale_fill_manual(values = col2[c(2:4)], name = "Stage") +
-  labs(x = "Year", y = "Proportion of cactus") + 
-  theme_classic() + mythemes 
+  scale_x_discrete(limits=rev, expand=c(-2,0)) +
+  labs(x = NULL, y = "Proportion of cacti") + coord_flip() +
+  theme_void() + mythemes + 
+  theme(axis.text.x = element_blank(), legend.position = "none") +
+  annotate("text", y = 0.8, x = 0.3, label = "Adult", color = col2[2], size = 5) +
+  annotate("text", y = 0.45, x = 0.3, label = "Subadult", color = col2[3], size = 5) +
+  annotate("text", y = 0.15, x = 0.3, label = "Juvenile", color = col2[4], size = 5)
 
 cactus.prop.plot
+```
+
+The cactus population seems to have some signs of positive recruitment in the last 10 years!
+
+Let's just plot this one more way, combined with the Wilcox outputs from before.
+
+```{r, cactus-wilcoxin-stage-composition, fig.height = 7, fig.width = 7}
+ggarrange(
+  cactus.wilcox.plot, 
+  cactus.prop.plot + annotate("text", y = 0, x = 2.8, 
+                              label = "e", color = "black", size = 5), 
+  nrow = 2, heights = c(4, 1))
 ```
 
 
@@ -5084,8 +3452,11 @@ Future monitoring, especially a repeat of the full-island iguana survey, will be
 
 # Session info
 ***
+
 ```{r}
 sessionInfo()
 ```
 
 <div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
+
+# References
