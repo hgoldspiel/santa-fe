@@ -17,6 +17,9 @@
 # Output files from R CMD check
 /*.Rcheck/
 
+# Raw data
+/data
+
 # RStudio files
 .Rproj.user/
 
@@ -37,3 +40,9 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# MARK objects
+.inp
+.out
+.res
+.vcv
