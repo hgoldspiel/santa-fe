@@ -18,7 +18,10 @@
 /*.Rcheck/
 
 # Raw data
-/data
+/data/
+
+# Rmd file
+.Rmd
 
 # RStudio files
 .Rproj.user/

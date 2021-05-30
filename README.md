@@ -1,8 +1,8 @@
 # Tortoise reintroduction on Santa Fe
 
-This repository includes data and code used to assess ecological outcomes of tortoise introduction on Santa Fe Island, Galapagos, Ecuador.
+This repository includes code used to assess ecological outcomes of tortoise introduction on Santa Fe Island, Galapagos, Ecuador.
 
-Original data and shapefiles can be found in the `data` folder. All code is available as `R` or `RMarkdown` scripts, the latter of which can be also viewed with results in the accompanying `html` file. 
+All code, annotations, and analytical outputs can be found in the accompanying `html` file in this repository.
 
 All analyses were performed in `R` version 4.0.3 (2020-10-10).
 
