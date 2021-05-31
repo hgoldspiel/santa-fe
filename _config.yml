@@ -1,6 +1,1 @@
-output_dir: "."
-output:
-  html_document:
-    theme: yeti
-
 theme: jekyll-theme-cayman
