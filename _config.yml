@@ -1,1 +1,4 @@
-theme: jekyll-theme-cayman
+output_dir: "."
+output:
+  html_document:
+    theme: yeti
