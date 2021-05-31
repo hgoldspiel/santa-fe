@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<metadata xml:lang="en"><Esri><CreaDate>20181219</CreaDate><CreaTime>12494900</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce><DataProperties><lineage><Process ToolSource="c:\program files (x86)\arcgis\desktop10.5\ArcToolbox\Toolboxes\Spatial Analyst Tools.tbx\Reclassify" Date="20181219" Time="124949">Reclassify veg_ha_2.tif ECOSIS_NAT "'Bosque Decíduo' 1;'Herbazal Decíduo/Lava Antigu' 2" A:\Galapagos\Santa_Fe\veg_ha_2 DATA</Process></lineage></DataProperties></Esri></metadata>
